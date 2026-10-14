@@ -1,0 +1,71 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools
+# File:       aipt-operator-egress.rules - Operator egress: update checks, vendor APIs, image and package pulls
+# Version:    1.0.0 (2026-10-12)
+# License:    Detection Rule License (DRL) 1.1 - https://github.com/SigmaHQ/Detection-Rule-License
+# Engine:     Suricata 7.0 / 8.0 (validated with suricata -T and offline -r replay on 8.0.7)
+# Message:    "AIPT <tool> <what>"; generic shapes use <tool> = Generic or Scanner.
+# Metadata:   affected_product, attack_target, confidence, created_at, deployment, performance_impact, policy,
+#             signature_severity, tag ai_pentest,
+#             updated_at (Emerging Threats Open layout). Each rule is preceded by one comment line with its source
+#             (upstream file:line at the commit in README.md, or the lab capture that established it).
+# Policy:     metadata "policy block-eligible|alert|informational" (measured false-positive profile in
+#             docs/fp-report.md). Every action stays alert. Only block-eligible sids (listed in
+#             suricata/aipt-block-eligible.sids) are candidates for drop, per sensor, after the observe-mode baseline
+#             and review of DEPLOYMENT.md.
+# SID ranges: 9500001-9500099 ARTEX, 9500100-9500199 earlier comparison rules, 9500200-9500299 AI-pentest family
+#             (CyberStrikeAI 9500200-9500219, HexStrike-AI 9500220-9500229, PentAGI 9500230-9500239, Strix 9500240-9500249,
+#             Shannon 9500250-9500259, Villager 9500260-9500264, MetasploitMCP 9500265-9500279, generic MCP 9500280-9500289,
+#             scanner shapes 9500290-9500299). Retired sids are listed in retired.rules and never reused.
+# Deployment (one file per sensor position; load only what the sensor can see):
+#   aipt-target-facing.rules    IDS in front of your own web servers (perimeter or reverse-proxy mirror): tool and
+#                               scanner fingerprints in requests sent to your applications.
+#   aipt-exposed-console.rules  datacenter / hosting / internal sensors that may see an operator console or tool API
+#                               (ARTEX, CyberStrikeAI, HexStrike-AI, PentAGI, MetasploitMCP, MCP servers).
+#   aipt-operator-egress.rules  egress sensors of networks where an operator could run one of these tools (update
+#                               checks, vendor APIs, image pulls). Most of these services are HTTPS-only: the http
+#                               rules need a TLS-inspecting proxy, the tls rules use SNI/certificates.
+#   aipt-llm-side.rules         only where LLM API traffic is cleartext: TLS-terminating egress proxy, LLM relay or
+#                               gateway, the provider, or a local model server (Ollama/vLLM). Needs large request
+#                               body limits (see that file).
+#   threshold.config: approved-assessment-suppress.threshold.template (generic sids only).
+#
+# GitHub, PyPI, Docker Hub, ghcr.io and the vendor APIs below are HTTPS-only: the http rules fire only behind a
+# TLS-inspecting proxy (or a plain-HTTP mirror); the tls rules work on SNI / certificate fields without decryption.
+
+# ---- ARTEX self-update (selfupdate/github.go) ----
+# source: selfupdate/github.go:97, selfupdate/stage.go:227
+alert http $HOME_NET any -> any any (msg:"AIPT ARTEX Self-Update User-Agent (artex-selfupdate)"; flow:established,to_server; target:dest_ip; http.user_agent; content:"artex-selfupdate"; startswith; fast_pattern; reference:url,github.com/Autumn-27/ARTEX; classtype:policy-violation; sid:9500020; rev:4; metadata:affected_product ARTEX, attack_target Client_Endpoint, confidence High, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy block-eligible, signature_severity Major, tag ai_pentest, updated_at 2026_10_12;)
+# source: selfupdate/github.go:18,96-97 (release check with the GitHub JSON Accept header)
+alert http $HOME_NET any -> any any (msg:"AIPT ARTEX Self-Update GitHub Release Check"; flow:established,to_server; target:dest_ip; http.uri; content:"/repos/Autumn-27/artex/releases/latest"; fast_pattern; nocase; http.header; content:"application/vnd.github+json"; reference:url,github.com/Autumn-27/ARTEX; classtype:policy-violation; sid:9500021; rev:4; metadata:affected_product ARTEX, attack_target Client_Endpoint, confidence High, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy block-eligible, signature_severity Major, tag ai_pentest, updated_at 2026_10_12;)
+# source: selfupdate/github.go:124-128 (asset name artex-<version>-<os>-<arch>.zip)
+alert http $HOME_NET any -> any any (msg:"AIPT ARTEX Self-Update Release Asset Download"; flow:established,to_server; target:dest_ip; http.uri; content:"/artex-"; fast_pattern; pcre:"/\/artex-\d+\.\d+\.\d+-(?:linux|darwin|windows)-(?:amd64|arm64)\.zip$/"; reference:url,github.com/Autumn-27/ARTEX; classtype:policy-violation; sid:9500022; rev:4; metadata:affected_product ARTEX, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+
+# ---- ARTEX recording proxy (go-mitmproxy, loopback :8788 by default) and egress helpers ----
+# source: go-mitmproxy cert/self_sign_ca.go:53-57,336-342 (leaf issued by CN=mitmproxy with subject O=mitmproxy; 9500039 merged here).
+# Every go-mitmproxy consumer generates this certificate; it is not an ARTEX indicator (ARTEX embeds go-mitmproxy as its recording proxy)
+alert tls any any -> any any (msg:"AIPT Generic go-mitmproxy Leaf Certificate"; flow:established,to_client; target:src_ip; tls.cert_issuer; content:"CN=mitmproxy"; fast_pattern; tls.cert_subject; content:"O=mitmproxy"; reference:url,github.com/lqqyt2423/go-mitmproxy; classtype:policy-violation; sid:9500038; rev:5; metadata:affected_product Any, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Internal, performance_impact Low, policy informational, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+# source: norma/tool/websearch.go:207,224-225 (DuckDuckGo HTML scraping with a fixed Firefox 128 UA and DDG Referer)
+# false-positive profile (docs/fp-report.md): POST without Accept-Language and Sec-Fetch-Mode (the Go client); a real Firefox ESR 128 sends both
+alert http $HOME_NET any -> any any (msg:"AIPT ARTEX Norma web_search DuckDuckGo HTML Scrape"; flow:established,to_server; target:dest_ip; http.method; content:"POST"; http.host; content:"html.duckduckgo.com"; http.uri; content:"/html/"; startswith; http.user_agent; content:"Mozilla/5.0 (X11|3b| Linux x86_64|3b| rv:128.0) Gecko/20100101 Firefox/128.0"; fast_pattern; http.referer; content:"https://html.duckduckgo.com/"; http.header_names; content:!"|0d 0a|Accept-Language|0d 0a|"; nocase; content:!"|0d 0a|Sec-Fetch-Mode|0d 0a|"; nocase; reference:url,github.com/Autumn-27/ARTEX; classtype:policy-violation; sid:9500042; rev:4; metadata:affected_product ARTEX, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+# source: server/sync_scopesentry.go:143, skills/scopesentry/SKILL.md (ScopeSentry MCP API key format; any ScopeSentry MCP client)
+alert http $HOME_NET any -> any any (msg:"AIPT ARTEX ScopeSentry MCP API Key Header (ssk_)"; flow:established,to_server; target:dest_ip; http.uri; content:"/mcp"; http.header; content:"X-API-Key|3a 20|ssk_"; fast_pattern; nocase; reference:url,github.com/Autumn-27/ScopeSentry; classtype:policy-violation; sid:9500045; rev:4; metadata:affected_product ARTEX, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Internal, performance_impact Low, policy alert, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+
+# ---- CyberStrikeAI operator egress ----
+# source: internal/handler/fofa.go:652,1076 (FOFA client UA; lab build sends CyberStrikeAI/1.7.4; 9500100 merged here)
+alert http $HOME_NET any -> any any (msg:"AIPT CyberStrikeAI Client User-Agent"; flow:established,to_server; target:dest_ip; http.user_agent; content:"CyberStrikeAI/"; startswith; fast_pattern; reference:url,github.com/AIPentest/CyberStrikeAI; classtype:policy-violation; sid:9500206; rev:4; metadata:affected_product CyberStrikeAI, attack_target Client_Endpoint, confidence High, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy block-eligible, signature_severity Major, tag ai_pentest, updated_at 2026_10_12;)
+# source: internal/config/config.go:1185, config.example.yaml:200 (HITL LLM-judge backend)
+alert tls $HOME_NET any -> any any (msg:"AIPT CyberStrikeAI HITL Judge Backend TLS SNI (api .typesafe .ai)"; flow:established,to_server; target:dest_ip; tls.sni; content:"api.typesafe.ai"; bsize:15; fast_pattern; threshold:type limit, track by_src, count 1, seconds 3600; reference:url,github.com/AIPentest/CyberStrikeAI; classtype:policy-violation; sid:9500212; rev:4; metadata:affected_product CyberStrikeAI, attack_target Client_Endpoint, confidence Low, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Informational, tag ai_pentest, updated_at 2026_10_12;)
+
+# ---- PentAGI, Strix, Shannon: operator egress ----
+# source: PentAGI backend/pkg/tools/searchers/searxng.go:121 (9500108 merged here)
+alert http $HOME_NET any -> any any (msg:"AIPT PentAGI Searcher User-Agent"; flow:established,to_server; target:dest_ip; http.user_agent; content:"PentAGI/"; startswith; fast_pattern; reference:url,github.com/vxcontrol/pentagi; classtype:policy-violation; sid:9500230; rev:4; metadata:affected_product PentAGI, attack_target Client_Endpoint, confidence High, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy block-eligible, signature_severity Major, tag ai_pentest, updated_at 2026_10_12;)
+# source: PentAGI backend/pkg/config/config.go:67, docker-compose.yml:26 (registry v2 pull of the platform or sandbox image)
+alert http $HOME_NET any -> any any (msg:"AIPT PentAGI Container Image Pull (vxcontrol)"; flow:established,to_server; target:dest_ip; http.uri; content:"/v2/vxcontrol/"; fast_pattern; pcre:"/\/v2\/vxcontrol\/(?:kali-linux|pentagi)\/(?:manifests|blobs)\//"; threshold:type limit, track by_src, count 1, seconds 3600; reference:url,github.com/vxcontrol/pentagi; classtype:policy-violation; sid:9500233; rev:4; metadata:affected_product PentAGI, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+# source: Strix strix/config/settings.py:144 (sandbox image pulled for every run)
+alert http $HOME_NET any -> any any (msg:"AIPT Strix Sandbox Image Pull (usestrix/strix-sandbox)"; flow:established,to_server; target:dest_ip; http.uri; content:"/v2/usestrix/strix-sandbox/"; fast_pattern; threshold:type limit, track by_src, count 1, seconds 3600; reference:url,github.com/usestrix/strix; classtype:policy-violation; sid:9500241; rev:4; metadata:affected_product Strix, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+# source: Shannon apps/cli/src/docker.ts:24 (worker image)
+alert http $HOME_NET any -> any any (msg:"AIPT Shannon Worker Image Pull (keygraph/shannon)"; flow:established,to_server; target:dest_ip; http.uri; content:"/v2/keygraph/shannon/"; fast_pattern; threshold:type limit, track by_src, count 1, seconds 3600; reference:url,github.com/KeygraphHQ/shannon; classtype:policy-violation; sid:9500253; rev:4; metadata:affected_product Shannon, attack_target Client_Endpoint, confidence Medium, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Minor, tag ai_pentest, updated_at 2026_10_12;)
+
+# ---- Villager (PyPI package name verified; every capability claim is press-only and unverified) ----
+# source: pypi.org/pypi/villager/json (package metadata); similar-tools.md 4.5
+alert http $HOME_NET any -> any any (msg:"AIPT Villager PyPI Package Download"; flow:established,to_server; target:dest_ip; http.uri; content:"villager"; fast_pattern; pcre:"/\/(?:simple|pypi)\/villager\/|\/villager-0\.[0-9][^\/]*\.(?:whl|tar\.gz)$/"; reference:url,pypi.org/project/villager/; classtype:policy-violation; sid:9500260; rev:4; metadata:affected_product Villager, attack_target Client_Endpoint, confidence Low, created_at 2026_10_09, deployment Perimeter, performance_impact Low, policy alert, signature_severity Informational, tag ai_pentest, updated_at 2026_10_12;)

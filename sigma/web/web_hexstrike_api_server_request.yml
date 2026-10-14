@@ -1,0 +1,36 @@
+title: HexStrike-AI Unauthenticated API Server Request
+id: 4d1a0295-af2d-43c6-9159-65b9ae3061ed
+name: web_hexstrike_api_server_request
+status: experimental
+description: |
+    Detects requests to the HexStrike-AI Flask API on its default port 8888 (it binds all interfaces and has no
+    authentication): the command, file and payload primitives and the per-tool wrappers that its MCP client calls.
+    Path and port are both required because 8888 is also Jupyter's default port.
+references:
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_server.py#L98
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_server.py#L9137-L9226
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_server.py#L10327
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1059
+logsource:
+    category: webserver
+detection:
+    selection_path:
+        - cs-uri-stem:
+              - '/api/command'
+              - '/api/files/create'
+              - '/api/files/modify'
+              - '/api/files/delete'
+              - '/api/files/list'
+              - '/api/payloads/generate'
+        - cs-uri-stem|startswith: '/api/tools/'
+    selection_port:
+        s-port: 8888
+    condition: all of selection_*
+falsepositives:
+    - A sanctioned HexStrike-AI deployment (it has no authentication; review every hit)
+level: medium

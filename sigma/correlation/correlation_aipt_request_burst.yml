@@ -1,0 +1,41 @@
+title: HTTP Request Burst From a Single Client
+id: c834ec7a-f73f-4818-8a0a-052a8714401a
+name: correlation_aipt_request_burst
+status: experimental
+description: |
+    Detects 30 or more non-static requests from one client within 10 seconds. The base rule
+    web_aipt_http_request_anonymous_base leaves out static assets and OPTIONS /, not authenticated requests.
+    Clients sharing a NAT address can contribute to the same count. LLM agents act in
+    bursts after each model round-trip, often with several workers at once. Lab (hosted model): ARTEX 2,440 requests per
+    10 seconds in the default configuration and 22 in the tuned one, CyberStrikeAI 5,557, ZAP 62, the benign browser
+    17 with assets included. On the synthetic benign corpus
+    (docs/fp-report.md) 219 windows remain, from batch jobs, the approved scan, the staff proxy, NAT offices and crawlers;
+    runs 01 and 03 keep 6 and 8 windows; the tuned ARTEX run 02 (targeted requests only) stays below the threshold.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.reconnaissance
+    - attack.t1595
+correlation:
+    type: event_count
+    rules:
+        - web_aipt_http_request_anonymous_base
+    group-by:
+        - c-ip
+    timespan: 10s
+    condition:
+        gte: 30
+    generate: false
+falsepositives:
+    - Batch jobs that call one API at high rate (allow-list their sources)
+    - Sanctioned scans (approved-assessment placeholders)
+    - Internal forward proxies and crawlers
+level: informational

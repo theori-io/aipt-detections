@@ -1,0 +1,43 @@
+title: LLM API Call Followed by a Request Burst From the Same Host
+id: 79303e1c-0b24-4575-aae2-a2fb09963151
+name: correlation_aipt_llm_call_then_target_requests
+status: experimental
+description: |
+    Detects a host that makes an LLM API request and then, within 5 minutes, produces a request burst on a web
+    server (correlation_aipt_request_burst: 30 or more non-static requests in 10 seconds from the same
+    address). A single web request after an LLM call does not satisfy the rule. The order and the shared address are
+    consistent with an agent's think-then-act loop but do not prove causation; NAT can join different users. Needs
+    proxy and web-server (or east-west) logs in the same SIEM; the alias client joins src_ip and c-ip. Lab (hosted
+    model): 2 windows for ARTEX in the default configuration, 1 for CyberStrikeAI, none for the tuned ARTEX run (no
+    30-request burst), the benign browser or ZAP; no window on the synthetic benign corpus.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.execution
+    - attack.t1059
+correlation:
+    type: temporal_ordered
+    rules:
+        - proxy_generic_llm_api_client
+        - correlation_aipt_request_burst
+    aliases:
+        client:
+            proxy_generic_llm_api_client: src_ip
+            correlation_aipt_request_burst: c-ip
+    group-by:
+        - client
+    timespan: 5m
+    condition:
+        gte: 2
+    generate: false
+falsepositives:
+    - Developer workstations using an LLM assistant while browsing internal sites
+level: low

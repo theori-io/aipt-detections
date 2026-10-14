@@ -1,0 +1,138 @@
+`comment("AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+Maintained Splunk equivalents of the eight Sigma correlations in sigma/correlation/ (sigma-cli 3.1.0 cannot convert all
+of them, see sigma/correlation/README.md). Tested on Splunk Enterprise 10.6.0.5 (splunk/splunk image, offline container)
+against internal fixtures and anonymised lab captures (an earlier local-model ARTEX run and runs 04/05); results agree with the internal Sigma matcher per correlation
+and client during development (engine harness not in this repository).
+SEMANTICS: SLIDING windows, not fixed bins. Every query sorts ascending and uses streamstats time_window=<timespan>,
+so a burst that straddles a bin boundary is still counted (the bin-based cadence flags in artex_behavior.spl query 2
+and the sigma-cli Splunk output, which uses bin _time span=<timespan>, can miss it). The window is the timespan
+ending at each event and EXCLUDES an event exactly one timespan earlier (Splunk 10.6: 15 404s whose first and last are
+60.000 s apart give at most 14 in any window; 30 requests 10.000 s apart at most 29). The internal evaluator includes
+both ends, so the two differ only when a group's first and last events are exactly one timespan apart to the
+millisecond; any burst inside the timespan agrees. Results list each client (group) once with the time the threshold was first reached;
+the evaluator additionally counts non-overlapping alert windows, so compare by client, not by count. streamstats keeps
+at most max_stream_window events per window (limits.conf, default 10000); raise it for very large bursts.
+FIELD MAPPING (Sigma webserver/proxy names -> fields used here; rename at the top of each search if yours differ):
+  c-ip -> clientip, cs-method -> method, cs-uri-stem -> uri_path, sc-status -> status, cs-user-agent -> useragent,
+  cs-host -> http_host (web index); src_ip -> src_ip, cs-host -> dest_host, c-uri-stem -> uri_path,
+  cs-content-type -> http_content_type, c-useragent -> useragent (proxy index; the proxy taxonomy name differs from the
+  webserver one).
+NULLS: stats/streamstats drop events whose by-field is null, so http_host is coalesced to "-" (requests without Host,
+e.g. raw probes, would otherwise vanish from the identical-request count); a missing User-Agent counts as the value
+"(none)" in the UA-diversity queries, as in the evaluator. JSON null values are extracted as the string "null" by
+KV_MODE=json; drop null keys at ingestion or map them before using the empty-UA query.
+APPROVED ASSESSMENTS (sigma/placeholders.yaml semantics): lookup files approved_assessment_sources.csv (column cidr,
+addresses or CIDRs) and approved_assessment_user_agents.csv (column useragent, wildcards allowed), shared to the app
+that runs the searches (an app-private lookup makes the subsearch fail and nothing is exempted). Keep one never-matching
+row (0.0.0.0/32, aipt-unset-placeholder) instead of an empty file. A source is exempt when it matches AND (its UA matches
+OR it sends none); the empty-UA burst exempts by source alone. The search command matches the CIDR rows as ranges
+(tested: 198.51.100.0/24 exempts 198.51.100.77, not 203.0.113.9).")`
+
+`comment("1. correlation_aipt_request_burst: >= 30 requests from one client within 10 s (base
+web_aipt_http_request_anonymous_base: GET/POST/HEAD/OPTIONS/PUT/DELETE/PATCH without static assets,
+without OPTIONS /; cookie-bearing requests count, a cookie is not server-validated authentication)")`
+index=web sourcetype=nginx:json method IN ("GET","POST","HEAD","OPTIONS","PUT","DELETE","PATCH")
+  NOT uri_path IN ("*.js","*.css","*.png","*.jpg","*.jpeg","*.gif","*.svg","*.ico","*.webp","*.woff","*.woff2","*.ttf","*.map","*/static/*","*/assets/*")
+  NOT (method="OPTIONS" uri_path="/")
+  NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+       ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*))
+| sort 0 _time
+| streamstats time_window=10s count as n by clientip
+| where n >= 30
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip
+
+`comment("2. correlation_aipt_distinct_paths_per_minute: >= 30 distinct paths from one client within 60 s (base
+web_aipt_http_request_anonymous_base)")`
+index=web sourcetype=nginx:json method IN ("GET","POST","HEAD","OPTIONS","PUT","DELETE","PATCH")
+  NOT uri_path IN ("*.js","*.css","*.png","*.jpg","*.jpeg","*.gif","*.svg","*.ico","*.webp","*.woff","*.woff2","*.ttf","*.map","*/static/*","*/assets/*")
+  NOT (method="OPTIONS" uri_path="/")
+  NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+       ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*))
+| sort 0 _time
+| streamstats time_window=60s dc(uri_path) as n by clientip
+| where n >= 30
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip
+
+`comment("3. correlation_aipt_http_404_burst: >= 15 responses with status 404 to one client within 60 s
+(base web_aipt_http_404_base)")`
+index=web sourcetype=nginx:json status=404
+  NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+       ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*))
+| sort 0 _time
+| streamstats time_window=60s count as n by clientip
+| where n >= 15
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip
+
+`comment("4. correlation_aipt_identical_request_repeat: the same (host, method, path) >= 20 times from one client within
+60 s (base web_aipt_http_request_anonymous_base); http_host coalesced to - so requests without Host are counted")`
+index=web sourcetype=nginx:json method IN ("GET","POST","HEAD","OPTIONS","PUT","DELETE","PATCH")
+  NOT uri_path IN ("*.js","*.css","*.png","*.jpg","*.jpeg","*.gif","*.svg","*.ico","*.webp","*.woff","*.woff2","*.ttf","*.map","*/static/*","*/assets/*")
+  NOT (method="OPTIONS" uri_path="/")
+  NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+       ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*))
+| eval http_host=coalesce(http_host, "-")
+| sort 0 _time
+| streamstats time_window=60s count as n by clientip http_host method uri_path
+| where n >= 20
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip http_host method uri_path
+
+`comment("5. correlation_aipt_empty_user_agent_burst: >= 40 requests without User-Agent (absent, empty or -) from one
+client within 60 s (base web_aipt_empty_user_agent_base: health/metrics paths and OPTIONS / excluded; exempt by
+approved source alone)")`
+index=web sourcetype=nginx:json (NOT useragent=* OR useragent="" OR useragent="-")
+  NOT uri_path IN ("/health","/healthz","/readyz","/livez","/status","/metrics","/ping","/api/health","/actuator/*") NOT (method="OPTIONS" uri_path="/")
+  NOT [| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+| sort 0 _time
+| streamstats time_window=60s count as n by clientip
+| where n >= 40
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip
+
+`comment("6. correlation_aipt_user_agent_diversity: >= 2 distinct User-Agents among the 404 responses to one client
+within 10 min (base web_aipt_http_404_base; a missing UA counts as the value (none))")`
+index=web sourcetype=nginx:json status=404
+  NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+       ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*))
+| eval ua=coalesce(useragent, "(none)")
+| sort 0 _time
+| streamstats time_window=10m dc(ua) as n by clientip
+| where n >= 2
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip
+
+`comment("7. correlation_aipt_user_agent_rotation: >= 50 distinct User-Agents among the 404 responses to one client
+within 10 min (same base and value rules as 6)")`
+index=web sourcetype=nginx:json status=404
+  NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+       ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*))
+| eval ua=coalesce(useragent, "(none)")
+| sort 0 _time
+| streamstats time_window=10m dc(ua) as n by clientip
+| where n >= 50
+| stats min(_time) as first_alert, max(n) as max_in_window by clientip
+
+`comment("8. correlation_aipt_llm_call_then_target_requests (temporal_ordered, 5 min): an LLM API request
+(same selector as proxy_generic_llm_api_client: a POST to a provider host with an API path or a JSON body, or a POST
+with a JSON body and a non-browser UA to a local API path) followed within 300 s by a request burst (query 1, same base: the event where the 10 s
+sliding count first reaches 30) from the same address (alias client = src_ip / clientip). The burst point is the crossing of
+the threshold; a burst that started before the LLM call and is still running afterwards does not count again.
+llm_approved_clients.csv (column cidr) exempts approved LLM clients. NAT can join different users behind one address.")`
+(index=proxy method=POST
+   ((dest_host IN ("api.anthropic.com","api.openai.com","dashscope.aliyuncs.com","dashscope-intl.aliyuncs.com","api.deepseek.com","api.moonshot.ai","api.moonshot.cn","api.z.ai","open.bigmodel.cn","generativelanguage.googleapis.com","openrouter.ai","api.groq.com","api.mistral.ai","api.together.xyz","api.x.ai","api.minimax.chat","ark.cn-beijing.volces.com","api.cohere.com","api.fireworks.ai","api.perplexity.ai","api.cerebras.ai","api.siliconflow.cn","*.openai.azure.com","bedrock-runtime.*.amazonaws.com","*-aiplatform.googleapis.com")
+     (uri_path IN ("*/chat/completions*","*/messages*","*/responses*","*/completions*","*:generateContent*","*:streamGenerateContent*","*/chatcompletion*","*/services/aigc/*") OR http_content_type="*json*"))
+    OR (uri_path IN ("*/chat/completions","*/v1/messages","*/v1/responses","*/api/chat","*/api/generate") http_content_type="*json*" NOT useragent="Mozilla/*"))
+   NOT [| inputlookup llm_approved_clients.csv | rename cidr AS src_ip | fields src_ip]
+   NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS src_ip | fields src_ip]
+        ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*)))
+OR (index=web sourcetype=nginx:json method IN ("GET","POST","HEAD","OPTIONS","PUT","DELETE","PATCH")
+   NOT uri_path IN ("*.js","*.css","*.png","*.jpg","*.jpeg","*.gif","*.svg","*.ico","*.webp","*.woff","*.woff2","*.ttf","*.map","*/static/*","*/assets/*")
+   NOT (method="OPTIONS" uri_path="/")
+   NOT ([| inputlookup approved_assessment_sources.csv | rename cidr AS clientip | fields clientip]
+        ([| inputlookup approved_assessment_user_agents.csv | fields useragent] OR NOT useragent=*)))
+| eval client=if(index="proxy", src_ip, clientip), kind=if(index="proxy", "llm", "web"), is_web=if(kind="web", 1, 0)
+| sort 0 _time
+| streamstats time_window=10s sum(is_web) as n10 by client
+| streamstats current=f last(n10) as prev_n10 by client
+| eval burst_point=if(kind="web" AND n10>=30 AND (isnull(prev_n10) OR prev_n10<30), 1, 0)
+| eval llm_t=if(kind="llm", _time, null())
+| streamstats last(llm_t) as last_llm by client
+| where burst_point=1 AND isnotnull(last_llm) AND _time - last_llm <= 300
+| stats count as chained_bursts, min(_time) as first_alert, values(last_llm) as llm_calls by client

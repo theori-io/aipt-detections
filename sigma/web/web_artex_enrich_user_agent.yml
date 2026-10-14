@@ -1,0 +1,24 @@
+title: ARTEX Asset Enrichment Prober User-Agent
+id: 06c3b971-d488-486b-9ff5-ad628a2bf3f4
+name: web_artex_enrich_user_agent
+status: experimental
+description: |
+    Detects the User-Agent artex-enrich/1.0 that the ARTEX asset-enrichment stage hard-codes for its single GET to
+    the root of every in-scope site. The string is compiled into the ARTEX binary and is not used by other software.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/enrich/enrich.go#L233
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|startswith: 'artex-enrich/'
+    condition: selection
+falsepositives:
+    - An operator rebuilding ARTEX with the same string for another purpose (unlikely)
+level: high

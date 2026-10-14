@@ -1,0 +1,47 @@
+title: HTTP Request Without User-Agent Base Rule for AIPT Correlations
+id: 6ca41916-e292-47aa-829b-886fedb6f9c3
+name: web_aipt_empty_user_agent_base
+status: experimental
+description: |
+    CORRELATION BASE SELECTOR - DO NOT DEPLOY AS A STAND-ALONE ALERT. Used only by the correlations in
+    sigma/correlation/ (generate: false there); excluded from stand-alone conversion in the README commands and the
+    test harness (README, "Format notes"). Base rule: a request with no or an empty User-Agent (ZAP baseline spider, raw nmap probes, UA-less scanner
+    requests in the lab). It never alerts on its own. An absent UA cannot match the approved UA list, so sanctioned
+    assessments are exempted by source alone.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent:
+            - null
+            - ''
+            - '-'
+    filter_main_health_path:
+        cs-uri-stem:
+            - '/health'
+            - '/healthz'
+            - '/readyz'
+            - '/livez'
+            - '/status'
+            - '/metrics'
+            - '/ping'
+            - '/api/health'
+    filter_main_health_prefix:
+        cs-uri-stem|startswith: '/actuator/'
+    filter_main_lb_check:
+        cs-method: 'OPTIONS'
+        cs-uri-stem: '/'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    condition: selection and not 1 of filter_main_health_* and not filter_main_lb_check and not filter_main_approved_assessment_src
+falsepositives:
+    - Base rule; IoT and server-to-server clients without User-Agent match (health checks excluded)
+level: informational

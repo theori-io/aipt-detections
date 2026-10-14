@@ -1,0 +1,33 @@
+title: ARTEX Recording Proxy CA or Traffic Index Written
+id: cd1a33aa-c789-43ab-9c66-a286367e62b3
+name: file_event_lnx_artex_recording_proxy_ca
+status: experimental
+description: |
+    Detects the go-mitmproxy CA files and the traffic index that the ARTEX recorder creates on first start under
+    <data>/traffic/: _ca/mitmproxy-ca.pem, _ca/mitmproxy-ca-cert.pem, _ca/mitmproxy-ca-cert.cer and
+    _index/index.sqlite. The traffic/_ca layout is ARTEX's; standalone go-mitmproxy writes the same file names
+    elsewhere.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/traffic/traffic.go#L177-L207
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/traffic/traffic.go#L355
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.credential-access
+    - attack.collection
+    - attack.t1557
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|endswith:
+            - '/traffic/_ca/mitmproxy-ca.pem'
+            - '/traffic/_ca/mitmproxy-ca-cert.pem'
+            - '/traffic/_ca/mitmproxy-ca-cert.cer'
+            - '/traffic/_index/index.sqlite'
+    condition: selection
+falsepositives:
+    - Standalone go-mitmproxy deployments using a traffic/_ca directory
+level: medium

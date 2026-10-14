@@ -1,0 +1,39 @@
+title: HTTP 404 Burst From a Single Client
+id: 53e38a64-a6ee-4c53-b1f6-467a5ae06044
+name: correlation_aipt_http_404_burst
+status: experimental
+description: |
+    Detects 15 or more 404 responses to one client within 60 seconds: path enumeration by an LLM agent or the
+    scanners it runs. Lab (hosted model): ARTEX 2,021 per minute in the default configuration and 17 in the tuned one,
+    CyberStrikeAI's scanners 15,975; the benign browser 2 and the ZAP baseline 0. Runs 01, 02 and 03 keep 3, 1 and 3
+    windows. On the synthetic benign corpus (docs/fp-report.md) 160 windows, all from misconfigured
+    clients (a partner cron on a retired API, a broken dashboard asset, a mobile build with a wrong base path) and the
+    approved scans, which is why the level is low.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.discovery
+    - attack.t1083
+correlation:
+    type: event_count
+    rules:
+        - web_aipt_http_404_base
+    group-by:
+        - c-ip
+    timespan: 60s
+    condition:
+        gte: 15
+    generate: false
+falsepositives:
+    - Misconfigured clients (retired API versions, wrong base paths, missing assets)
+    - Crawlers hitting broken links after a site migration
+    - Vulnerability scans by the site owner (approved-assessment placeholders)
+level: low

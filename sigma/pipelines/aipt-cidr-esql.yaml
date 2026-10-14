@@ -1,0 +1,26 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+# pySigma pipeline: CIDR-aware approved-source lists for the Elasticsearch ES|QL backend (sigma convert -t esql).
+# Use it together with, and before, aipt-placeholders.yaml (lower priority value = applied first):
+#   sigma convert -t esql -p sigma/pipelines/aipt-cidr-esql.yaml -p sigma/pipelines/aipt-placeholders.yaml <rules>
+# Why: with aipt-placeholders.yaml alone the backend emits `c-ip`=="0.0.0.0/32". On an ip-typed field (ECS source.ip,
+# or c-ip mapped as ip) Elasticsearch 8.19.23 rejects the whole query ("Cannot convert string [0.0.0.0/32] to [IP]"),
+# so the rule never runs; on a keyword field it is a string comparison and a CIDR exempts nothing. ES|QL needs
+# cidr_match(). ES|QL 8.19 does not accept a list as a query parameter, so the ranges are written into the
+# expression: replace "0.0.0.0/32" (never matches) by your comma-separated quoted addresses or CIDRs, e.g.
+#   expression: 'cidr_match({field}, "192.0.2.10/32", "198.51.100.0/24")'
+# Tested on Elasticsearch 8.19.23 during development: 198.51.100.0/24 exempts 198.51.100.77, not 203.0.113.9.
+# Lucene (-t lucene) needs no extra pipeline when the address field is mapped as ip: query_string matches
+# c-ip:198.51.100.0\/24 as a range on an ip field (and as a literal string on a keyword field, which exempts nothing).
+name: AIPT CIDR-aware source lists (ES|QL)
+priority: 5
+transformations:
+  - id: aipt_cidr_esql_approved_assessment_sources
+    type: query_expression_placeholders
+    expression: 'cidr_match({field}, "0.0.0.0/32")'
+    include:
+      - approved_assessment_sources
+  - id: aipt_cidr_esql_llm_approved_clients
+    type: query_expression_placeholders
+    expression: 'cidr_match({field}, "0.0.0.0/32")'
+    include:
+      - llm_approved_clients

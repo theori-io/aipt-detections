@@ -1,0 +1,28 @@
+title: CyberStrikeAI Client or WebShell Manager User-Agent
+id: ca3370bd-f355-49f2-9f0b-e9a44a2c1339
+name: web_cyberstrikeai_user_agent
+status: experimental
+description: |
+    Detects the CyberStrikeAI User-Agents: CyberStrikeAI/<version> of its HTTP client and CyberStrikeAI-WebShell/1.0
+    of its WebShell manager, which talks to web shells it has planted on a target.
+references:
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/handler/fofa.go#L652
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/handler/webshell.go#L798
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.persistence
+    - attack.t1505.003
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: webserver
+detection:
+    selection:
+        - cs-user-agent|startswith: 'CyberStrikeAI/'
+        - cs-user-agent|contains: 'CyberStrikeAI-WebShell/'
+    condition: selection
+falsepositives:
+    - Clients of a sanctioned CyberStrikeAI deployment
+level: high

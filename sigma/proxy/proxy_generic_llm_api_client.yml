@@ -1,0 +1,95 @@
+title: LLM API Request From a Host Not Approved for LLM Use
+id: 4d76d11a-310d-4281-ab3c-ebaa6a1934b2
+name: proxy_generic_llm_api_client
+status: experimental
+description: |
+    Detects LLM API requests from a host that is not on the approved list (%llm_approved_clients%): either a POST to
+    an exact hosted-LLM API host (no suffix matching, so look-alike hosts such as notapi.<provider> do not match) or a
+    tenant-specific Azure OpenAI, Bedrock or Vertex AI host (suffix match with a leading dot) with
+    an API path or a JSON body, or a POST with a JSON body and a non-browser User-Agent to a chat-completions,
+    messages, responses or Ollama path on any host (local model servers). The path branch requires the non-browser
+    UA and JSON content type because scanner templates probe the same paths with browser UAs. An empty approved list
+    turns this into an inventory query. Sanctioned assessments are exempted when the client is listed in
+    %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents% (placeholders.yaml); both
+    lists ship empty. Needs request-level proxy logs (TLS-inspecting proxy); a CONNECT-only or DNS/SNI view shows
+    provider host contact, not an API call, and is not covered by this rule.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/provider.go
+    - https://platform.openai.com/docs/api-reference/chat
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.command-and-control
+    - attack.t1102.002
+logsource:
+    category: proxy
+detection:
+    selection_provider_host:
+        cs-host:
+            - 'api.anthropic.com'
+            - 'api.openai.com'
+            - 'dashscope.aliyuncs.com'
+            - 'dashscope-intl.aliyuncs.com'
+            - 'api.deepseek.com'
+            - 'api.moonshot.ai'
+            - 'api.moonshot.cn'
+            - 'api.z.ai'
+            - 'open.bigmodel.cn'
+            - 'generativelanguage.googleapis.com'
+            - 'openrouter.ai'
+            - 'api.groq.com'
+            - 'api.mistral.ai'
+            - 'api.together.xyz'
+            - 'api.x.ai'
+            - 'api.minimax.chat'
+            - 'ark.cn-beijing.volces.com'
+            - 'api.cohere.com'
+            - 'api.fireworks.ai'
+            - 'api.perplexity.ai'
+            - 'api.cerebras.ai'
+            - 'api.siliconflow.cn'
+    selection_provider_host_azure:
+        cs-host|endswith: '.openai.azure.com'
+    selection_provider_host_bedrock:
+        cs-host|startswith: 'bedrock-runtime.'
+        cs-host|endswith: '.amazonaws.com'
+    selection_provider_host_vertex:
+        cs-host|endswith: '-aiplatform.googleapis.com'
+    selection_provider_api:
+        cs-method: 'POST'
+    selection_provider_api_path:
+        c-uri-stem|contains:
+            - '/chat/completions'
+            - '/messages'
+            - '/responses'
+            - '/completions'
+            - ':generateContent'
+            - ':streamGenerateContent'
+            - '/chatcompletion'
+            - '/services/aigc/'
+    selection_provider_api_json:
+        cs-content-type|contains: 'json'
+    selection_local_path:
+        cs-method: 'POST'
+        c-uri-stem|endswith:
+            - '/chat/completions'
+            - '/v1/messages'
+            - '/v1/responses'
+            - '/api/chat'
+            - '/api/generate'
+        cs-content-type|contains: 'json'
+    filter_main_browser:
+        c-useragent|startswith: 'Mozilla/'
+    filter_main_approved_client:
+        src_ip|expand: '%llm_approved_clients%'
+    filter_main_approved_assessment_src:
+        src_ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - c-useragent|expand: '%approved_assessment_user_agents%'
+        - c-useragent: null
+    condition: ((1 of selection_provider_host* and selection_provider_api and 1 of selection_provider_api_*) or (selection_local_path and not filter_main_browser)) and not filter_main_approved_client and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Developers and applications that call LLM APIs; maintain %llm_approved_clients%
+    - Every approved application and developer calling an LLM API until %llm_approved_clients% is filled (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational

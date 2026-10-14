@@ -1,0 +1,40 @@
+title: Many Distinct Non-Static URL Paths From a Single Client Per Minute
+id: 376ac24f-ffa6-4b2c-993b-045b17e681f4
+name: correlation_aipt_distinct_paths_per_minute
+status: experimental
+description: |
+    Detects 30 or more distinct non-static URL paths requested by one client within 60 seconds. The base selector
+    web_aipt_http_request_anonymous_base excludes static assets, not authenticated requests; clients behind a shared
+    address contribute to the same count. Lab (hosted model): ARTEX 2,533 in the default configuration
+    and 33 in the tuned one, CyberStrikeAI 16,217, ZAP 65; the benign browser reached 24 with assets included. On the
+    synthetic benign corpus (docs/fp-report.md) 382 windows remain, from crawlers (172), NAT offices (146), API
+    gateways, the staff proxy, the approved scan, batch jobs and CGNAT; the hosted-model runs 01, 02 and 03 keep 3, 1
+    and 3 windows.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.discovery
+    - attack.t1083
+correlation:
+    type: value_count
+    rules:
+        - web_aipt_http_request_anonymous_base
+    group-by:
+        - c-ip
+    timespan: 60s
+    condition:
+        field: cs-uri-stem
+        gte: 30
+    generate: false
+falsepositives:
+    - Search-engine crawlers (verify by reverse DNS and allow-list)
+    - Partner API gateways and internal forward proxies that front many users
+level: informational

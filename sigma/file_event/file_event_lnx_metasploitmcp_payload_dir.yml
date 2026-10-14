@@ -1,0 +1,27 @@
+title: MetasploitMCP Payload Written to Default Save Directory
+id: 74b47db4-5377-4e11-82cf-fde984da6dd3
+name: file_event_lnx_metasploitmcp_payload_dir
+status: experimental
+description: |
+    Detects a python process writing to ~/payloads/, the default PAYLOAD_SAVE_DIR where MetasploitMCP stores
+    generated payloads.
+references:
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/MetasploitMCP.py#L32
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.resource-development
+    - attack.t1587.001
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|re: '^(/root|/home/[^/]+)/payloads/[^/]+$'
+        Image|contains: 'python'
+    condition: selection
+falsepositives:
+    - Other python tools writing to ~/payloads
+    - QA engineers keeping API request payloads in ~/payloads (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational

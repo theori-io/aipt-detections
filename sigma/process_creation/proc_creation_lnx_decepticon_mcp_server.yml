@@ -1,0 +1,27 @@
+title: Decepticon MCP Server or Docker Network
+id: 044f6c20-5ef4-4975-8178-b7489c6766d6
+name: proc_creation_lnx_decepticon_mcp_server
+status: experimental
+description: |
+    Detects 'decepticon mcp serve', which exposes Decepticon as an MCP server to coding agents, and its Docker
+    network decepticon-net. Both strings come from the project README only; the code was not inspected.
+references:
+    - https://github.com/BitterSecurity/Decepticon
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1610
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection:
+        CommandLine|contains:
+            - 'decepticon mcp serve'
+            - 'decepticon-net'
+    condition: selection
+falsepositives:
+    - Research use of Decepticon
+level: low

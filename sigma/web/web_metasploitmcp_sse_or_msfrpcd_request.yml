@@ -1,0 +1,38 @@
+title: MetasploitMCP SSE Transport or Metasploit RPC Request
+id: 34a32b7b-4aa1-4f0c-83fe-aa1f13a45443
+name: web_metasploitmcp_sse_or_msfrpcd_request
+status: experimental
+description: |
+    Supporting rule: the MetasploitMCP HTTP transport (GET /sse and POST /messages/ on its default port 8085) or a
+    POST to msfrpcd on 55553, which the MetasploitMCP README starts without TLS. Both bind loopback by default
+    (--host 127.0.0.1, msfrpcd -a 127.0.0.1), so only instances started on 0.0.0.0 or behind a reverse proxy are
+    visible. Any MCP server on 8085 or any msfrpcd client on 55553 looks the same.
+references:
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/MetasploitMCP.py#L1643
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/MetasploitMCP.py#L1725
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/MetasploitMCP.py#L1758
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/README.md#L69
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.execution
+    - attack.t1203
+logsource:
+    category: webserver
+detection:
+    selection_sse:
+        cs-uri-stem:
+            - '/sse'
+            - '/messages/'
+        s-port: 8085
+    selection_rpc:
+        cs-method: 'POST'
+        cs-uri-stem: '/api/'
+        s-port: 55553
+    condition: 1 of selection_*
+falsepositives:
+    - Other MCP servers on 8085
+    - Metasploit Pro or other msfrpcd clients on 55553
+    - An internal FastMCP server listening on 8085 (SSE branch) (measured on the synthetic benign corpus, docs/fp-report.md)
+level: low

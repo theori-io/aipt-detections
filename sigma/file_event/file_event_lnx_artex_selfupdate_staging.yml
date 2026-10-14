@@ -1,0 +1,30 @@
+title: ARTEX Self-Update Staging Files Written
+id: 9cc3e72a-d62a-4a06-989f-004c03f9d3a5
+name: file_event_lnx_artex_selfupdate_staging
+status: experimental
+description: |
+    Detects the files the ARTEX self-updater stages next to its binary: artex.new (downloaded release),
+    artex.new.sha256, artex.upgrade.json (pending-upgrade marker) and artex.old (previous binary kept for rollback).
+    The artex.failed name of the previous version does not exist in the source and was removed.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/selfupdate/selfupdate.go#L43-L78
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|endswith:
+            - '/artex.new'
+            - '/artex.new.sha256'
+            - '/artex.old'
+            - '/artex.upgrade.json'
+    condition: selection
+falsepositives:
+    - Unknown
+level: high

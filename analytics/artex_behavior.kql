@@ -1,0 +1,117 @@
+// AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+// ARTEX / LLM-agent behavioural analytics - Microsoft Sentinel / Azure Data Explorer (KQL). Checked with Microsoft's
+// Kusto language service (0 diagnostics reported); ThinkAct semantics were compared with an internal Python model.
+// That tooling is not distributed. The SPL twin was tested on Splunk 10.6 during development.
+// Sliding-window equivalents of the eight Sigma correlations: analytics/correlations.kql.
+// Source table assumed: W3CIISLog-like web-server log with columns TimeGenerated, cIP, csMethod, csHost, csUriStem,
+// scStatus, csUserAgent (adapt names to your schema; nginx JSON -> remote_addr, method, http_host, uri, status, ua).
+// Sigma parity: the Cadence thresholds equal the Sigma correlations (sigma/correlation/), but this query
+// uses fixed bins (bin()) where Sigma correlations and the internal evaluator use sliding windows, so a burst that
+// straddles a bin boundary can be missed here. Treat it as a hunting/triage query, not a converted Sigma rule.
+// Approved-assessment exemptions are not applied: add | where not(ipv4_is_in_range(cIP, "<approved CIDR>")) per range.
+// Idle gap: with a hosted model (GLM-5.3, lab runs 01-03, LLM latency p50 6-20 s) T=30 s found 4-7 think-act cycles per
+// 20-minute run and T=5 s 10-19; a CPU-bound local model (p50 659 s) makes every gap count. W and k are tool-mix
+// properties and stay.
+let IdleGapSeconds = 30.0;    // T: a gap longer than this is "thinking"
+let BurstWindow = 10s;        // W
+let BurstMin = 5;             // k requests in [start, start + W] (inclusive, the start request included)
+let Lookback = 24h;
+let StaticExt = @"(?i)\.(js|css|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|map)$";
+let StaticDir = @"(?i)/(static|assets)/";
+let Web = WebServerLog | where TimeGenerated > ago(Lookback);
+//
+// 1. Idle -> burst alternation (think -> act), per client. Same semantics as SPL query 1. Idle-gap starts are computed first (pre-filter), so the self-join only pairs each start with
+//    the requests of the same client inside [start, start + W].
+let Seq = Web
+| project cIP, TimeGenerated
+| order by cIP asc, TimeGenerated asc
+| extend gap_s = iff(prev(cIP) == cIP, (TimeGenerated - prev(TimeGenerated)) / 1s, real(null));
+let Starts = Seq | where gap_s > IdleGapSeconds | project cIP, StartT = TimeGenerated;
+let ThinkAct = Starts
+| join kind=inner (Seq | project cIP, T2 = TimeGenerated) on cIP
+| where T2 between (StartT .. (StartT + BurstWindow))
+| summarize burst_size = count() by cIP, StartT
+| where burst_size >= BurstMin
+| summarize idle_burst_cycles = count(), first_burst = min(StartT), last_burst = max(StartT) by cIP;
+//
+// 2. Cadence signals with the Sigma correlation definitions (fixed bins); each c_* flag mirrors one correlation.
+//    Anonymous requests (web_aipt_http_request_anonymous_base): GET/POST/HEAD/OPTIONS/PUT/DELETE/PATCH, no static asset,
+//    not OPTIONS / (cookie-bearing requests count: a cookie is not server-validated authentication). Request burst 30/10 s, distinct paths 30/60 s and identical requests
+//    20/60 s count anonymous requests; requests without User-Agent 40/60 s outside health/metrics paths and OPTIONS /;
+//    distinct UAs among 404 responses 2/10 min (informational, not in signals) and 50/10 min.
+let HealthPaths = dynamic(["/health", "/healthz", "/readyz", "/livez", "/status", "/metrics", "/ping", "/api/health"]);
+let Anon = Web
+| where csMethod in~ ("GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE", "PATCH")
+    and not(csUriStem matches regex StaticExt) and not(csUriStem matches regex StaticDir)
+    and not(csMethod =~ "OPTIONS" and csUriStem == "/");
+let Burst = Anon | summarize n = count() by cIP, bin(TimeGenerated, 10s) | summarize max_req_10s = max(n) by cIP;
+let Paths = Anon | summarize n = dcount(csUriStem) by cIP, bin(TimeGenerated, 1m) | summarize max_paths_60s = max(n) by cIP;
+let NotFound = Web | where scStatus == 404 | summarize n = count() by cIP, bin(TimeGenerated, 1m)
+| summarize max_404_60s = max(n) by cIP;
+let NoUa = Web
+| where (isempty(csUserAgent) or csUserAgent == "-") and not(csUriStem in~ (HealthPaths)) and not(csUriStem startswith "/actuator/")
+    and not(csMethod =~ "OPTIONS" and csUriStem == "/")
+| summarize n = count() by cIP, bin(TimeGenerated, 1m) | summarize max_noua_60s = max(n) by cIP;
+let Identical = Anon
+| summarize n = count() by cIP, csHost, csMethod, csUriStem, bin(TimeGenerated, 1m)
+| summarize max_identical_60s = max(n) by cIP;
+let UaDiversity = Web | where scStatus == 404
+| summarize n = dcount(csUserAgent) by cIP, bin(TimeGenerated, 10m) | summarize max_ua404_10m = max(n) by cIP;
+Web
+| summarize total = count() by cIP
+| join kind=leftouter Burst on cIP
+| join kind=leftouter Paths on cIP
+| join kind=leftouter NotFound on cIP
+| join kind=leftouter NoUa on cIP
+| join kind=leftouter Identical on cIP
+| join kind=leftouter UaDiversity on cIP
+| join kind=leftouter ThinkAct on cIP
+| extend c_request_burst = iff(max_req_10s >= 30, 1, 0),
+         c_distinct_paths = iff(max_paths_60s >= 30, 1, 0),
+         c_404_burst = iff(max_404_60s >= 15, 1, 0),
+         c_identical_repeat = iff(max_identical_60s >= 20, 1, 0),
+         c_empty_ua_burst = iff(max_noua_60s >= 40, 1, 0),
+         c_ua_diversity = iff(max_ua404_10m >= 2, 1, 0),
+         c_ua_rotation = iff(max_ua404_10m >= 50, 1, 0)
+| extend signals = c_request_burst + c_distinct_paths + c_404_burst + c_identical_repeat + c_empty_ua_burst + c_ua_rotation
+| where signals >= 1 or c_ua_diversity == 1
+| project cIP, signals, c_ua_diversity, total, max_req_10s, max_paths_60s, max_404_60s, max_identical_60s, max_noua_60s,
+          max_ua404_10m, idle_burst_cycles
+| order by signals desc, total desc
+//
+// 3. Egress correlate (example; mirrors correlation_aipt_llm_call_then_target_requests): an LLM API POST from a
+//    host followed within 5 min by a request burst (>= 30 anonymous requests in one 10 s bin) from the same address.
+//    The LLM-call selector equals proxy_generic_llm_api_client: a POST to a provider host with an API path or a JSON
+//    body, or a POST with a JSON body and a non-browser UA to a local API path. Adapt the ProxyLog column names
+//    (SourceIP, RequestMethod, DestinationHostName, RequestUri, RequestContentType, RequestClientApplication = UA)
+//    before use.
+// let LLMCalls = ProxyLog | where RequestMethod == "POST"
+//   | extend provider_host = DestinationHostName in~ (
+//   "api.anthropic.com", "api.openai.com", "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com",
+//   "api.deepseek.com", "api.moonshot.ai", "api.moonshot.cn", "api.z.ai",
+//   "open.bigmodel.cn", "generativelanguage.googleapis.com", "openrouter.ai", "api.groq.com",
+//   "api.mistral.ai", "api.together.xyz", "api.x.ai", "api.minimax.chat",
+//   "ark.cn-beijing.volces.com", "api.cohere.com", "api.fireworks.ai", "api.perplexity.ai",
+//   "api.cerebras.ai", "api.siliconflow.cn")
+//     or DestinationHostName endswith ".openai.azure.com"
+//     or (DestinationHostName startswith "bedrock-runtime." and DestinationHostName endswith ".amazonaws.com")
+//     or DestinationHostName endswith "-aiplatform.googleapis.com"
+//   | extend provider_api = RequestUri contains "/chat/completions"
+//     or RequestUri contains "/messages"
+//     or RequestUri contains "/responses"
+//     or RequestUri contains "/completions"
+//     or RequestUri contains ":generateContent"
+//     or RequestUri contains ":streamGenerateContent"
+//     or RequestUri contains "/chatcompletion"
+//     or RequestUri contains "/services/aigc/"
+//   | extend local_api = RequestUri endswith "/chat/completions"
+//     or RequestUri endswith "/v1/messages"
+//     or RequestUri endswith "/v1/responses"
+//     or RequestUri endswith "/api/chat"
+//     or RequestUri endswith "/api/generate"
+//   | where (provider_host and (provider_api or RequestContentType contains "json"))
+//     or (local_api and RequestContentType contains "json" and not(RequestClientApplication startswith "Mozilla/"))
+//   | project SourceIP, LlmT = TimeGenerated;
+// let Bursts = Anon | summarize n = count() by cIP, B = bin(TimeGenerated, 10s) | where n >= 30;
+// LLMCalls | join kind=inner Bursts on $left.SourceIP == $right.cIP
+// | where B between (LlmT .. LlmT + 5m) | summarize bursts = count(), first_burst = min(B) by SourceIP

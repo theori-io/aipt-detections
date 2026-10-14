@@ -1,0 +1,20 @@
+# AIPT Sigma placeholders (pySigma ValueListPlaceholderTransformation / the |expand modifier).
+# Every list ships empty; an empty list exempts nothing.
+#
+# llm_approved_clients             hosts approved to call LLM APIs (proxy_generic_llm_api_client). Empty = every client
+#                                  is reported, which makes that rule an inventory query.
+# approved_assessment_sources      source IPs or CIDRs of a sanctioned external assessment (contracted pentest or ASM
+#                                  service). Obtain them from the vendor per engagement; never guess. Examples of the
+#                                  accepted forms (documentation ranges): '192.0.2.10', '198.51.100.0/24', '2001:db8::/32'.
+# approved_assessment_user_agents  User-Agent strings (Sigma wildcards allowed) that service sends from those sources.
+#
+# Semantics: a generic rule is exempted only when the source matches AND (the UA matches OR no UA is sent); a UA alone
+# never exempts. Rules keyed on an absent UA exempt by source alone. Only generic rules (shapes, scanner UAs, base rules
+# of correlations) carry the exemption; tool-specific rules never do.
+# CIDR entries: SIEM backends substitute the literal strings; use a CIDR-aware lookup there (Splunk cidrmatch, KQL
+# range functions). Use the shipped backend-specific CIDR pipelines and verify the generated predicates locally.
+# Suricata and ModSecurity equivalents: suricata/approved-assessment-suppress.threshold.template and the allowlist
+# switch in modsecurity/aipt-config.conf.
+llm_approved_clients: []
+approved_assessment_sources: []
+approved_assessment_user_agents: []

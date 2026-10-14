@@ -1,0 +1,25 @@
+title: ARTEX Norma SDK WebFetch User-Agent
+id: b27c0488-676f-4c85-a5d9-2ca68e594fa0
+name: web_artex_norma_webfetch_user_agent
+status: experimental
+description: |
+    Detects the User-Agent norma/0.4 sent by the WebFetch tool of the norma agent SDK that ARTEX workers use to
+    fetch pages. Any other agent built on the norma SDK sends the same value, so treat it as medium confidence and
+    look for other ARTEX indicators from the same client.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/go.mod
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|startswith: 'norma/'
+    condition: selection
+falsepositives:
+    - Other agents built on the norma SDK
+level: medium

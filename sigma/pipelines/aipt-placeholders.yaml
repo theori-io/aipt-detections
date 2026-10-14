@@ -1,0 +1,20 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+# pySigma processing pipeline that fills the AIPT placeholders for sigma-cli / pySigma conversions.
+#   sigma convert -t <backend> [-p <backend pipeline>] -p sigma/pipelines/aipt-placeholders.yaml <rules>
+# Semantics of each list: sigma/placeholders.yaml. pySigma refuses empty lists, so every list ships with one value
+# that never matches (0.0.0.0/32, aipt-unset-placeholder): with these values nothing is exempted and every client is
+# reported by proxy_generic_llm_api_client. Replace them with your own values; take assessment-vendor ranges and
+# User-Agents from that vendor for each engagement. Backends substitute the strings literally: a CIDR entry needs a
+# CIDR-aware lookup in the SIEM (Splunk cidrmatch, KQL ipv4_is_in_range).
+name: AIPT placeholder values
+priority: 10
+vars:
+  llm_approved_clients:
+    - '0.0.0.0/32'
+  approved_assessment_sources:
+    - '0.0.0.0/32'
+  approved_assessment_user_agents:
+    - 'aipt-unset-placeholder'
+transformations:
+  - id: aipt_value_placeholders
+    type: value_placeholders

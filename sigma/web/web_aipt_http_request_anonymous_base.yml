@@ -1,0 +1,70 @@
+title: Anonymous HTTP Request to a Non-Static Path Base Rule for AIPT Correlations
+id: abe41beb-a479-4b6e-bf67-0c5587cc9e90
+name: web_aipt_http_request_anonymous_base
+status: experimental
+description: |
+    CORRELATION BASE SELECTOR - DO NOT DEPLOY AS A STAND-ALONE ALERT. Used only by the correlations in
+    sigma/correlation/ (generate: false there); excluded from stand-alone conversion in the README commands and the
+    test harness (README, "Format notes"). Base rule for the request-burst, distinct-path and
+    identical-request correlations: every logged HTTP request except (1) static assets (scripts, styles, images, fonts,
+    source maps, /static/ and /assets/ trees), which a browser fetches in bulk on every page load, and (2) OPTIONS /
+    (load-balancer health checks). Health and metrics paths are kept: probing them is part of reconnaissance (observed
+    in the lab). Requests that carry a cookie are counted like any other: a client-supplied cookie is not server-validated
+    authentication, and an earlier version that left cookie-bearing requests out could be evaded by sending any
+    cookie (docs/fp-report.md gives the benign-window counts with and without that filter). Logged-in users
+    behind NAT offices and CGNAT therefore reach the thresholds more often; allow-list those sources or, where the
+    web server logs a server-validated user or session id, group by that id instead of the address. Use the
+    correlations for hunting and triage, never for blocking. Sanctioned assessments are exempted when the client
+    is listed in %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents%
+    (placeholders.yaml); both lists ship empty.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-10
+modified: 2026-10-12
+tags:
+    - attack.reconnaissance
+    - attack.t1595
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-method:
+            - 'GET'
+            - 'POST'
+            - 'HEAD'
+            - 'OPTIONS'
+            - 'PUT'
+            - 'DELETE'
+            - 'PATCH'
+    filter_main_static_ext:
+        cs-uri-stem|endswith:
+            - '.js'
+            - '.css'
+            - '.png'
+            - '.jpg'
+            - '.jpeg'
+            - '.gif'
+            - '.svg'
+            - '.ico'
+            - '.webp'
+            - '.woff'
+            - '.woff2'
+            - '.ttf'
+            - '.map'
+    filter_main_static_dir:
+        cs-uri-stem|contains:
+            - '/static/'
+            - '/assets/'
+    filter_main_lb_check:
+        cs-method: 'OPTIONS'
+        cs-uri-stem: '/'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: selection and not 1 of filter_main_static_* and not filter_main_lb_check and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Base rule; it never alerts on its own
+level: informational

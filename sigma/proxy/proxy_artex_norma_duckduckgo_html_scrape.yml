@@ -1,0 +1,27 @@
+title: ARTEX Norma web_search DuckDuckGo HTML Scrape
+id: af2a4fe3-6124-4533-a415-4110e800eecf
+name: proxy_artex_norma_duckduckgo_html_scrape
+status: experimental
+description: |
+    Detects the ddgs backend of the norma web_search tool used by ARTEX planners and workers: requests to
+    html.duckduckgo.com with the fixed User-Agent of Firefox 128 on Linux. The Brave and Tavily API branches of the
+    previous version were dropped because any API user matches them.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/go.mod
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.reconnaissance
+    - attack.t1593.002
+logsource:
+    category: proxy
+detection:
+    selection:
+        cs-host: 'html.duckduckgo.com'
+        c-useragent: 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0'
+    condition: selection
+falsepositives:
+    - Users of the DuckDuckGo HTML endpoint with exactly this Firefox 128 build on Linux
+    - Linux workstations on Firefox ESR 128 using the DuckDuckGo HTML endpoint (identical User-Agent and Referer) (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational

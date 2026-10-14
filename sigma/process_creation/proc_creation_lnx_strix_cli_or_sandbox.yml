@@ -1,0 +1,29 @@
+title: Strix CLI or Sandbox Image
+id: a165e12d-77cd-4ad5-8fa8-86f00b6c3f6a
+name: proc_creation_lnx_strix_cli_or_sandbox
+status: experimental
+description: |
+    Detects the Strix command-line entry point strix (pip package strix-agent) or any command line naming its
+    sandbox image usestrix/strix-sandbox.
+references:
+    - https://github.com/usestrix/strix/blob/4695290682900eeedf4819a0336976d56dc028e0/pyproject.toml#L57-L58
+    - https://github.com/usestrix/strix/blob/4695290682900eeedf4819a0336976d56dc028e0/strix/config/settings.py#L144
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1610
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_cli:
+        Image|endswith: '/strix'
+    selection_image:
+        CommandLine|contains: 'usestrix/strix-sandbox'
+    condition: 1 of selection_*
+falsepositives:
+    - Sanctioned Strix use in CI
+    - Unrelated binaries named strix
+level: medium

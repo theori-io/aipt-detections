@@ -1,0 +1,33 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools
+# File:       approved-assessment-suppress.threshold.template - threshold.config lines for sanctioned assessments
+# Version:    1.0.0 (2026-10-12)
+# License:    Detection Rule License (DRL) 1.1 - https://github.com/SigmaHQ/Detection-Rule-License
+#
+# A sanctioned external assessment (for example a contracted pentest or ASM service) should not raise the GENERIC
+# scanner-shape alerts of this pack, while every tool-specific signature keeps firing. Copy the lines below into
+# threshold.config, replace {{APPROVED_ASSESSMENT_SOURCES}} with the vendor's source addresses (Suricata address list,
+# e.g. [198.51.100.0/24,192.0.2.10]) and uncomment. Obtain the ranges from the vendor for each engagement; none are
+# shipped. Do not use a blanket pass rule: a matching pass stops inspection of the whole packet/flow and would also
+# silence the tool-specific rules.
+#
+# Generic sids (affected_product Any): 9500006-9500008, 9500010, 9500110, 9500280-9500283, 9500290-9500295,
+# 9500297, 9500299. Never suppressed: every sid whose affected_product names a tool.
+# 9500008 and 9500283 alert on server responses, i.e. the scanner is the destination: track by_dst.
+#
+# suppress gen_id 1, sig_id 9500006, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500007, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500008, track by_dst, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500010, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500110, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500280, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500281, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500282, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500283, track by_dst, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500290, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500291, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500292, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500293, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500294, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500295, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500297, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}
+# suppress gen_id 1, sig_id 9500299, track by_src, ip {{APPROVED_ASSESSMENT_SOURCES}}

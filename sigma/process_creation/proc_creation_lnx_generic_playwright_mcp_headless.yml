@@ -1,0 +1,35 @@
+title: Playwright MCP Server or Playwright CLI Started Headless
+id: 404887ed-2da9-434f-81e8-0d7ebb1ea5ee
+name: proc_creation_lnx_generic_playwright_mcp_headless
+status: experimental
+description: |
+    Detects the browser automation that ARTEX seeds as its browser MCP server ('npx @playwright/mcp --headless'),
+    the playwright-cli tool and the api-recon runtime harvester. Generic for every Playwright-based agent; pair it
+    with the ARTEX parent-process rule for attribution.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/db/db.go#L264
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/Dockerfile#L28
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_mcp:
+        CommandLine|contains|all:
+            - '@playwright/mcp'
+            - '--headless'
+    selection_cli:
+        CommandLine|contains:
+            - 'playwright-cli'
+            - '@playwright/cli'
+            - 'runtime_harvest.js'
+    condition: 1 of selection_*
+falsepositives:
+    - QA and test-automation hosts running Playwright
+    - QA automation hosts running the Playwright MCP server headless (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational

@@ -1,0 +1,27 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+# pySigma pipeline: CIDR-aware approved-source lists for the Kusto backends (Sentinel, Defender XDR, ADX).
+# Use it together with, and before, aipt-placeholders.yaml (lower priority value = applied first):
+#   sigma convert -t kusto [-p sentinel_asim] -p sigma/pipelines/aipt-cidr-kusto.yaml -p sigma/pipelines/aipt-placeholders.yaml <rules>
+# Each IP placeholder becomes the null-safe two-family construct used by analytics/correlations.kql:
+#   (coalesce(ipv4_is_in_any_range(<field>, <name>_v4), false) or coalesce(ipv6_is_in_any_range(<field>, <name>_v6), false))
+# Define the two lists per name once in the workspace (a leading let statement or a saved function), e.g.
+#   let approved_assessment_sources_v4 = dynamic(["192.0.2.10", "198.51.100.0/24"]);
+#   let approved_assessment_sources_v6 = dynamic(["2001:db8:1::/48"]);
+#   let llm_approved_clients_v4 = dynamic(["203.0.113.5"]);
+#   let llm_approved_clients_v6 = dynamic([]);
+# An empty dynamic([]) exempts nothing. Keep each list to its own family and to valid entries: ipv4_is_in_any_range /
+# ipv6_is_in_any_range answer null for a client address they cannot parse (an unparsable list entry is skipped and does
+# not change the other entries, as observed on the engine), and only the coalesce keeps that null from turning a negated filter such as
+# `not(<approved>)` into a dropped row; a bare ipv4_is_in_any_range would make every IPv6 client disappear from
+# proxy_generic_llm_api_client. Validate the lists as analytics/correlations.kql does (IsInvalidEntry) if you cannot
+# keep them clean by hand. Internal checks included conversion, a Python model and Kusto emulator cases.
+# The harness and cases are not distributed. These are functional checks, not a performance measurement.
+name: AIPT CIDR-aware source lists (Kusto)
+priority: 5
+transformations:
+  - id: aipt_cidr_lookup_kusto
+    type: query_expression_placeholders
+    expression: "(coalesce(ipv4_is_in_any_range({field}, {id}_v4), false) or coalesce(ipv6_is_in_any_range({field}, {id}_v6), false))"
+    include:
+      - approved_assessment_sources
+      - llm_approved_clients

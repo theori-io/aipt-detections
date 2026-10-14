@@ -1,0 +1,31 @@
+title: ARTEX Console Auth Status or First-Run Init Request
+id: d970003a-63f2-4981-85ae-7137869b9ab4
+name: web_artex_console_auth_endpoints
+status: experimental
+description: |
+    Supporting rule for web servers that may host an ARTEX console: a GET of /api/auth/status or a POST to
+    /api/auth/init, the two unauthenticated endpoints the ARTEX web console calls before login. Common paths such as
+    /api/health, /setup and /api/auth/login were removed because scanners probe them on every server; attribution to
+    ARTEX needs a response fingerprint (Suricata 9500050/9500051, ModSecurity 9590401).
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/server.go#L655-L660
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/auth.go#L144-L175
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.discovery
+    - attack.t1046
+logsource:
+    category: webserver
+detection:
+    selection_status:
+        cs-method: 'GET'
+        cs-uri-stem: '/api/auth/status'
+    selection_init:
+        cs-method: 'POST'
+        cs-uri-stem: '/api/auth/init'
+    condition: 1 of selection_*
+falsepositives:
+    - Other web applications exposing /api/auth/status or /api/auth/init
+level: informational

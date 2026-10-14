@@ -1,0 +1,32 @@
+title: MetasploitMCP Server or Metasploit RPC Daemon With Default Password
+id: 953b4923-4ff0-4045-a367-f87cae344fdb
+name: proc_creation_lnx_metasploitmcp_server
+status: experimental
+description: |
+    Detects a Python interpreter executing the MetasploitMCP server script (script in the script-argument position;
+    editors or grep that only mention the file name do not match) and msfrpcd started as in the MetasploitMCP README with its default
+    password literal, a configuration in which the Metasploit RPC is protected by a public password. The
+    environment-variable branch of the previous version was dropped (non-standard field).
+references:
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/MetasploitMCP.py#L28-L32
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/README.md#L60-L69
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1203
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_mcp:
+        Image|re: '/python[0-9.]*$'
+        CommandLine|re: '^\S*python[0-9.]*(\s+-\S+)*\s+(\S*/)?MetasploitMCP\.py(\s|$)'
+    selection_msfrpcd:
+        Image|endswith: '/msfrpcd'
+        CommandLine|contains: '-P yourpassword'
+    condition: 1 of selection_*
+falsepositives:
+    - Lab copies of the README instructions
+level: high

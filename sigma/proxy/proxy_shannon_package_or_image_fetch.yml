@@ -1,0 +1,29 @@
+title: Shannon CLI Package or Worker Image Fetch
+id: d06cadb5-8d4c-47d4-8c0b-b84d622dc310
+name: proxy_shannon_package_or_image_fetch
+status: experimental
+description: |
+    Detects Shannon operator egress on a TLS-inspecting proxy: the npm package @keygraph/shannon (npx mode) and
+    Docker registry pulls of the keygraph/shannon worker image.
+references:
+    - https://github.com/KeygraphHQ/shannon/blob/2468b67d9e40d70d0b189462c5041c24e1dc886c/apps/cli/src/docker.ts#L24
+    - https://github.com/KeygraphHQ/shannon/blob/2468b67d9e40d70d0b189462c5041c24e1dc886c/apps/cli/src/mode.ts#L29
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: proxy
+detection:
+    selection_pull:
+        c-uri-stem|contains: '/v2/keygraph/shannon/'
+    selection_npm:
+        c-uri-stem|contains:
+            - '/@keygraph/shannon'
+            - '/@keygraph%2Fshannon'
+    condition: 1 of selection_*
+falsepositives:
+    - Sanctioned Shannon use in CI
+level: medium

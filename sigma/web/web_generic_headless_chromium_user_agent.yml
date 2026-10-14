@@ -1,0 +1,36 @@
+title: Headless Chromium User-Agent
+id: 31461d3c-a5b3-4d8a-834f-329785c61a96
+name: web_generic_headless_chromium_user_agent
+status: experimental
+description: |
+    Supporting rule: the HeadlessChrome/ User-Agent of headless Chromium. ARTEX ships Playwright and a headless
+    browser MCP server, Shannon drives Playwright, and so does every other browser-automation crawler; use it only
+    together with tool-specific indicators from the same client. Sanctioned assessments are exempted when the client
+    is listed in %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents%
+    (placeholders.yaml); both lists ship empty.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/Dockerfile#L28
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/db/db.go#L264
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+    - detection.threat-hunting
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|contains: 'HeadlessChrome/'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: selection and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Monitoring, screenshot and SEO services
+    - Test automation
+    - Synthetic browser monitoring (every check of every probe) (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational

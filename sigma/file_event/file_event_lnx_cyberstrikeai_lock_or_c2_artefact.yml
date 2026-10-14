@@ -1,0 +1,33 @@
+title: CyberStrikeAI Cgroup Lock File or C2 Artefact Written
+id: 2353b0e9-ff2d-486b-b8e0-abdc60beaade
+name: file_event_lnx_cyberstrikeai_lock_or_c2_artefact
+status: experimental
+description: |
+    Detects the process-isolation lock file cyberstrike-cgroup-<uid>-<hash>.lock that CyberStrikeAI creates in the
+    temporary directory, and files the cyberstrike-ai process writes under tmp/c2/ (built-in C2 artefacts) or
+    tmp/workspace/conversations/.
+references:
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/processguard/platform_linux.go#L55
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/config.example.yaml#L74
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection_lock:
+        TargetFilename|re: '/cyberstrike-cgroup-[0-9]+-[0-9a-f]+\.lock$'
+    selection_dirs_image:
+        Image|endswith: '/cyberstrike-ai'
+    selection_dirs_path:
+        TargetFilename|contains:
+            - '/tmp/c2/'
+            - '/tmp/workspace/conversations/'
+    condition: selection_lock or (selection_dirs_image and selection_dirs_path)
+falsepositives:
+    - Unknown
+level: high

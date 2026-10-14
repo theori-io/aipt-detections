@@ -1,0 +1,25 @@
+title: Strix Sandbox Image Pull
+id: 5c0e3e33-8fbd-4c2d-b7da-96895e0d46f2
+name: proxy_strix_sandbox_image_pull
+status: experimental
+description: |
+    Detects the Docker registry pull of ghcr.io/usestrix/strix-sandbox that Strix performs for every run, on a TLS-
+    inspecting proxy. The git/2.43.0 repository-probe branch of the previous version was dropped because Ubuntu
+    24.04's packaged git sends the same request.
+references:
+    - https://github.com/usestrix/strix/blob/4695290682900eeedf4819a0336976d56dc028e0/strix/config/settings.py#L144
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: proxy
+detection:
+    selection:
+        c-uri-stem|contains: '/v2/usestrix/strix-sandbox/'
+    condition: selection
+falsepositives:
+    - Sanctioned Strix use
+level: medium

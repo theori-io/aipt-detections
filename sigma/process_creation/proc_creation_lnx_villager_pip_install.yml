@@ -1,0 +1,25 @@
+title: Villager Package Installed With Pip
+id: c24e8605-d472-4519-a0aa-e7527afae3dd
+name: proc_creation_lnx_villager_pip_install
+status: experimental
+description: |
+    Detects pip installing the PyPI package villager. The package is verified on PyPI; every capability attributed
+    to it in press reports is unverified.
+references:
+    - https://pypi.org/project/villager/
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection:
+        CommandLine|re: '\bpip3?\s+install\s+(\S+\s+)*villager([=<>!~\s]|$)'
+    condition: selection
+falsepositives:
+    - Unrelated packages named villager
+level: low

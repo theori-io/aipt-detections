@@ -1,0 +1,44 @@
+title: Shell or Attack Tool Spawned by ARTEX
+id: 2a25c7e1-18bc-4141-878f-7c99e5c2bc33
+name: proc_creation_lnx_artex_child_process
+status: experimental
+description: |
+    Detects the ARTEX worker executing its Bash tool: the artex binary spawns 'bash -c <command>' through the norma
+    task runner, and from there nmap, curl, python and the other tools the model chooses. Each child is one model
+    decision; the command lines are the agent's activity log.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/worker.go#L204-L223
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1059.004
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_parent:
+        ParentImage|endswith: '/artex'
+    selection_shell:
+        Image|endswith:
+            - '/bash'
+            - '/sh'
+            - '/dash'
+        CommandLine|contains: ' -c '
+    selection_tools:
+        Image|endswith:
+            - '/nmap'
+            - '/curl'
+            - '/python3'
+            - '/python'
+            - '/node'
+            - '/npx'
+            - '/nc'
+            - '/sqlmap'
+            - '/ffuf'
+            - '/nuclei'
+    condition: selection_parent and (selection_shell or selection_tools)
+falsepositives:
+    - Unknown once the parent is confirmed to be the ARTEX binary
+level: high

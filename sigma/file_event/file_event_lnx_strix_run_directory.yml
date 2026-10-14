@@ -1,0 +1,24 @@
+title: Strix Run Directory Written
+id: 3fc3ed93-6831-4d7d-ac87-a701e4b2c156
+name: file_event_lnx_strix_run_directory
+status: experimental
+description: |
+    Detects files under strix_runs/, where Strix stores the results and logs of each run.
+references:
+    - https://github.com/usestrix/strix/blob/4695290682900eeedf4819a0336976d56dc028e0/strix/core/paths.py#L8
+    - https://github.com/usestrix/strix/blob/4695290682900eeedf4819a0336976d56dc028e0/strix/interface/cli.py#L61
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.collection
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|contains: '/strix_runs/'
+    condition: selection
+falsepositives:
+    - Sanctioned Strix use
+level: medium

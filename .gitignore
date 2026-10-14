@@ -1,0 +1,38 @@
+# Internal development tools are not part of the public rules-only edition.
+/tests/
+*.py
+*.sh
+/analytics/correlations.regression.kql
+/modsecurity/replay-backend.conf.template
+/sigma/validation.yaml
+/Makefile
+/.github/workflows/validate.yml
+
+# Local configuration, captures and generated results
+*.local.json
+*.local.env
+/results/
+/out/
+*.log
+eve.json
+*.pcap
+*.pcapng
+
+# Release patches contain deleted internal code; keep them outside the public tree.
+*.diff
+*.patch
+
+# Python development environments and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Editors and OS
+.DS_Store
+__MACOSX/
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,39 @@
+title: Several User-Agents Receiving 404 From a Single Client Within 10 Minutes
+id: 147134aa-3760-4911-bbfb-d0a9f6d64a44
+name: correlation_aipt_user_agent_diversity
+status: experimental
+description: |
+    Detects 2 or more distinct User-Agent strings among the 404 responses of one client within 10 minutes
+    (web_aipt_http_404_base). Agents that force no User-Agent bring the default of each tool the model picks (curl,
+    the Nmap NSE string, an empty UA, the norma SDK). Counting only 404 responses keeps NAT offices, CGNAT and API
+    gateways, which legitimately show many User-Agents, out of most windows; the rule is informational and meant for
+    hunting. Lab (hosted model): ARTEX 2 User-Agents (curl and none), CyberStrikeAI 4, the benign browser 1, ZAP 2. On the synthetic benign corpus
+    (docs/fp-report.md) 82 windows remain, mostly API gateways and some NAT offices; runs 01-03 each keep 1
+    window.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.reconnaissance
+    - attack.t1595
+correlation:
+    type: value_count
+    rules:
+        - web_aipt_http_404_base
+    group-by:
+        - c-ip
+    timespan: 10m
+    condition:
+        field: cs-user-agent
+        gte: 2
+    generate: false
+falsepositives:
+    - NAT gateways, CGNAT and partner API gateways that put many clients behind one address (measured)
+level: informational

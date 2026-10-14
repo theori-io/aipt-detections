@@ -1,0 +1,47 @@
+title: Identical HTTP Request Repeated by a Single Client
+id: d4328981-5339-4842-bce2-2e55e7771e2b
+name: correlation_aipt_identical_request_repeat
+status: experimental
+description: |
+    Detects the same method, host and path requested 20 or more times by one client within 60 seconds, counted over
+    non-static requests (web_aipt_http_request_anonymous_base: OPTIONS /
+    are ignored): independent agent workers re-issue the same probe. Lab: with a scripted recon plan ARTEX reached 120
+    (raw method+path repeats over all requests). With a hosted model the raw maxima were 8 and 11 (ARTEX) and 25
+    (CyberStrikeAI) per 60 s, and the correlation itself, which also applies the non-static filter and groups by host,
+    raised no alert in the replay; the raw maximum and the rule's verdict are not the same metric. Treat this rule as a
+    supporting indicator. The benign browser 6, ZAP 3, the lab control client 9. On the synthetic benign corpus
+    (docs/fp-report.md) 373 windows remain, from partner pollers, a misconfigured client, NAT offices, batch jobs,
+    webhooks and the approved scan. Review these sources before enabling alerts; the earlier cookie-filtered result
+    was 315 windows.
+    No window in the hosted-model runs 01-03.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.reconnaissance
+    - attack.t1595
+correlation:
+    type: event_count
+    rules:
+        - web_aipt_http_request_anonymous_base
+    group-by:
+        - c-ip
+        - cs-host
+        - cs-method
+        - cs-uri-stem
+    timespan: 60s
+    condition:
+        gte: 20
+    generate: false
+falsepositives:
+    - Partner API pollers and batch jobs (allow-list their sources)
+    - Misconfigured clients retrying one failing call
+    - Webhook retry storms
+level: informational

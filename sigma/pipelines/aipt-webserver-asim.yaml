@@ -1,0 +1,35 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+# pySigma pipeline: SigmaHQ webserver taxonomy -> Microsoft Sentinel ASIM WebSession column names, for the sigma/web
+# rules. Use it with the plain kusto backend (NOT with the sentinel_asim pipeline: pySigma-backend-kusto 1.0.1 has no
+# source-address column in its imWebSession schema, so rules with c-ip fail there), together with the CIDR and
+# placeholder pipelines:
+#   sigma convert -t kusto -p sigma/pipelines/aipt-webserver-asim.yaml -p sigma/pipelines/aipt-cidr-kusto.yaml \
+#                 -p sigma/pipelines/aipt-placeholders.yaml sigma/web
+# The output is the where-predicate only; wrap it yourself: `imWebSession | where <predicate>` (or your own WebSession
+# parser / table).
+# URL form: this adapter only renames cs-uri-stem to Url; it does not extract the path. Path rules require a column
+# without scheme, host or query string. ASIM Url can include parameters for every event type, and HTTPSession can
+# include scheme and host. Map cs-uri-stem to a path-only column provided by your parser before converting path rules.
+# Internal path tests recorded misses with unnormalised Url; they did not validate a path-normalisation step.
+# cs-cookie maps to the optional ASIM column HttpCookie; most WebSession parsers do not populate it, so
+# web_artex_console_session_cookie only works where the cookie header is already collected (the pack does not ask for
+# raw cookie logging). Internal Kusto emulator tests covered a User-Agent predicate and a path predicate,
+# including absolute-URL and query-string negative cases. The harness and fixtures are not distributed.
+name: AIPT webserver fields -> ASIM WebSession columns
+priority: 5
+transformations:
+  - id: aipt_webserver_to_asim_columns
+    type: field_name_mapping
+    mapping:
+      c-ip: SrcIpAddr
+      cs-method: HttpRequestMethod
+      cs-uri-stem: Url
+      cs-host: HttpHost
+      cs-user-agent: HttpUserAgent
+      cs-referer: HttpReferrer
+      cs-cookie: HttpCookie
+      sc-status: HttpStatusCode
+      s-port: DstPortNumber
+    rule_conditions:
+      - type: logsource
+        category: webserver

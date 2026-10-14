@@ -1,0 +1,29 @@
+title: ARTEX Console JWT Signing Key Created
+id: dc673faa-3b16-402b-a1e8-d018de955b47
+name: file_event_lnx_artex_jwt_key
+status: experimental
+description: |
+    Detects creation of jwt.key, the HS256 signing secret the ARTEX server writes beside its binary (older installs:
+    under data/) on first start, when written by the artex binary or inside an artex directory. The file name alone
+    is generic.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/auth.go#L20
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/auth.go#L48-L51
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.persistence
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|endswith: '/jwt.key'
+    selection_ctx:
+        - Image|endswith: '/artex'
+        - TargetFilename|contains: '/artex/'
+    condition: all of selection*
+falsepositives:
+    - Other applications keeping a jwt.key in a directory named artex
+level: low

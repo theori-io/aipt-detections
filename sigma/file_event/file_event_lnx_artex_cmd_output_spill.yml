@@ -1,0 +1,26 @@
+title: ARTEX Worker Command Output Spill File
+id: bf806994-5ad1-4f90-9cfe-265c6bb4b0f9
+name: file_event_lnx_artex_cmd_output_spill
+status: experimental
+description: |
+    Detects files written under <data>/tasks/<task-id>/i<intent-id>/cmd-output/, where the ARTEX worker stores large
+    tool output and passes only a head and a pointer to the model. Each file is the raw output of one tool run.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/worker.go#L286
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/worker.go#L463
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.collection
+    - attack.t1074.001
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|re: '/tasks/[0-9]+/i[0-9]+/cmd-output/'
+    condition: selection
+falsepositives:
+    - Unknown
+level: high

@@ -1,0 +1,33 @@
+title: Go Default HTTP Client User-Agent
+id: eb4a1aa0-f729-4669-9c7d-eb1eb2de0363
+name: web_generic_go_http_client_user_agent
+status: experimental
+description: |
+    Supporting rule: the Go net/http default User-Agent Go-http-client/. ARTEX custom HTTP tools set no User-Agent
+    and therefore send it, as does every Go program that does not set one. Sanctioned assessments are exempted when
+    the client is listed in %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents%
+    (placeholders.yaml); both lists ship empty.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/customtool.go#L435-L444
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+    - detection.threat-hunting
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|startswith: 'Go-http-client/'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: selection and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Any Go-based client, exporter or health checker
+    - Batch jobs, health checkers, partner API clients, API gateways, internal services and LLM applications written in Go (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational

@@ -1,0 +1,33 @@
+title: PentAGI Searcher User-Agent or Sandbox Image Pull
+id: 9f7401b7-2bc3-4d21-8d14-5c0655289f91
+name: proxy_pentagi_searcher_or_image_pull
+status: experimental
+description: |
+    Detects PentAGI operator egress on a TLS-inspecting proxy: the searcher User-Agent PentAGI/1.0 and Docker
+    registry pulls of the vxcontrol images it runs (platform, Kali sandbox, scraper, graphiti, pgvector).
+references:
+    - https://github.com/vxcontrol/pentagi/blob/b611fbebcf55b6deb88ad1fb7bf1f1ce7a357242/backend/pkg/tools/searchers/searxng.go#L121
+    - https://github.com/vxcontrol/pentagi/blob/b611fbebcf55b6deb88ad1fb7bf1f1ce7a357242/backend/pkg/config/config.go#L67
+    - https://github.com/vxcontrol/pentagi/blob/b611fbebcf55b6deb88ad1fb7bf1f1ce7a357242/docker-compose.yml#L26
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: proxy
+detection:
+    selection_ua:
+        c-useragent|startswith: 'PentAGI/'
+    selection_pull:
+        c-uri-stem|contains:
+            - '/v2/vxcontrol/kali-linux/'
+            - '/v2/vxcontrol/pentagi/'
+            - '/v2/vxcontrol/scraper/'
+            - '/v2/vxcontrol/graphiti/'
+            - '/v2/vxcontrol/pgvector/'
+    condition: 1 of selection_*
+falsepositives:
+    - Sanctioned PentAGI installations
+level: medium

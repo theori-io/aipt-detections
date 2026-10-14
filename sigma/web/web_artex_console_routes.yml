@@ -1,0 +1,48 @@
+title: ARTEX Console-Specific API or UI Route Access
+id: 89b93481-c7af-419e-9bae-6dfd1892e437
+name: web_artex_console_routes
+status: experimental
+description: |
+    Detects requests for routes that only the ARTEX control plane serves (exploration graph, intercept approvals,
+    ScopeSentry sync, LLM profiles and records, self-update stream, and the static-export UI routes under /function/
+    and /system/). In a web-server or reverse-proxy log this means an ARTEX console is hosted behind it and is being
+    used. Generic prefixes such as /api/agents/, /api/mcp/ and /api/traffic/ were removed. Only
+    successful responses (status 200) match: a 404 for these paths means the console is not hosted there. Web-server
+    logs carry no response body, so the product-identifying response (health JSON with service artex, the exact
+    console title) is checked by Suricata 9500050/9500053 and ModSecurity 9590401, not by this rule.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/server.go#L655-L933
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/web/src/navigation/sidebar/sidebar-items.ts#L69-L95
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.command-and-control
+    - attack.t1071.001
+logsource:
+    category: webserver
+detection:
+    selection_route_api:
+        cs-uri-stem|startswith:
+            - '/api/exploration/'
+            - '/api/intercept/'
+            - '/api/sync/scopesentry'
+            - '/api/llm/profiles'
+            - '/api/llm/records'
+            - '/api/update/stream'
+    selection_route_ui:
+        cs-uri-stem|startswith:
+            - '/function/tasks'
+            - '/function/findings'
+            - '/function/traffic'
+            - '/function/llm-records'
+            - '/system/intercept'
+            - '/system/llm'
+            - '/system/mcp'
+            - '/system/skills'
+    selection_ok:
+        sc-status: 200
+    condition: 1 of selection_route_* and selection_ok
+falsepositives:
+    - Scanner templates requesting the same paths on servers that are not ARTEX (check the response status)
+level: medium

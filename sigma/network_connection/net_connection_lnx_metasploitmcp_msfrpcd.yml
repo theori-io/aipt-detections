@@ -1,0 +1,27 @@
+title: Python Process Connecting to Metasploit RPC Port 55553
+id: eb7379c4-5a8e-4313-a013-a5a601576c03
+name: net_connection_lnx_metasploitmcp_msfrpcd
+status: experimental
+description: |
+    Detects a python process (MetasploitMCP through pymetasploit3) opening a connection to msfrpcd on its default
+    port 55553.
+references:
+    - https://github.com/GH05TCREW/MetasploitMCP/blob/afc792d9ee17540f8a94349b20a3b203e6961a92/MetasploitMCP.py#L29-L31
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1203
+logsource:
+    category: network_connection
+    product: linux
+detection:
+    selection:
+        Initiated: 'true'
+        DestinationPort: 55553
+        Image|contains: 'python'
+    condition: selection
+falsepositives:
+    - Other msfrpcd automation written in python
+level: medium

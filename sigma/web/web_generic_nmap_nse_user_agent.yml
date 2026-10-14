@@ -1,0 +1,32 @@
+title: Nmap Scripting Engine User-Agent
+id: 22453e58-ff76-4b42-8ce3-9d427faa8922
+name: web_generic_nmap_nse_user_agent
+status: experimental
+description: |
+    Detects the Nmap NSE http library User-Agent. ARTEX ships nmap in its image and CyberStrikeAI runs nmap -sV -sC
+    by default; both produced this UA in the lab. Generic: any nmap user. Sanctioned assessments are exempted when
+    the client is listed in %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents%
+    (placeholders.yaml); both lists ship empty.
+references:
+    - https://nmap.org/book/nse.html
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/tools/nmap.yaml#L4
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.discovery
+    - attack.t1046
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|startswith: 'Mozilla/5.0 (compatible; Nmap Scripting Engine'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: selection and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Authorised vulnerability scans and asset inventories using nmap
+level: low

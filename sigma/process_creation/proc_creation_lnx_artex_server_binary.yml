@@ -1,0 +1,42 @@
+title: ARTEX Server Binary Execution
+id: 8cffa640-61d7-4aed-9114-5c8cca3b2119
+name: proc_creation_lnx_artex_server_binary
+status: experimental
+description: |
+    Detects the ARTEX Go binary starting with its command-line flags (-addr for the console, default :8787; -proxy
+    for the recording proxy, default 127.0.0.1:8788; -data) or as a child of the start.sh supervisor that restarts
+    it after a self-update, or any execution (also without arguments) from the documented install paths /opt/artex,
+    /opt/artex/artex and /app/artex (container image).
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/cmd/artex/main.go#L55-L57
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/start.sh
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1204.002
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_image:
+        Image|endswith: '/artex'
+    selection_flags:
+        CommandLine|contains:
+            - ' -addr'
+            - ' -proxy'
+            - ' -data'
+            - ' --addr'
+            - ' --proxy'
+    selection_parent:
+        ParentCommandLine|endswith: '/start.sh'
+    selection_install_path:
+        Image:
+            - '/opt/artex'
+            - '/opt/artex/artex'
+            - '/app/artex'
+    condition: (selection_image and (selection_flags or selection_parent)) or selection_install_path
+falsepositives:
+    - Unrelated binaries named artex
+level: high

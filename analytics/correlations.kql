@@ -1,0 +1,217 @@
+// AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+// Maintained KQL (Microsoft Sentinel / Azure Data Explorer) equivalents of the eight Sigma correlations in
+// sigma/correlation/ (sigma-cli 3.1.0 and pySigma-backend-kusto 1.0.1 cannot convert correlations; see
+// sigma/correlation/README.md). One query: the eight results are unioned with a `correlation` column.
+// Author-reported internal checks: Kusto language-service analysis and a functional emulator regression run.
+// The regression harness and fixtures are not distributed in this public edition. Peak-load cost was not measured.
+// See README.md (Validation) and DEPLOYMENT.md for scope and local deployment checks.
+// SEMANTICS (identical to correlations.spl): SLIDING windows. For each event the window is (t - span, t] over the
+// same group (an event exactly one span earlier is outside, as with Splunk streamstats time_window). The count is
+// exact: a self-join of each event with the group's events inside its window. A cheap pre-filter keeps only groups
+// whose events in two adjacent fixed bins of length span reach the threshold (necessary: any window of length span
+// lies inside two adjacent bins), so the join only runs for candidate groups, and the self-join is time-bounded: both
+// sides carry the bin of length span as a join key (the right side is indexed under its own bin and the next one), so
+// an event is paired only with the events of its own and the previous bin before the exact (t - span, t] predicate
+// is applied. The window semantics are unchanged; the join never compares events further apart than two bins.
+// Each group is reported once with the time the threshold was first reached. Distinct counts use make_set (exact,
+// not dcount's estimate).
+// SCHEDULING: Lookback 1d is a hunting default. As a scheduled analytics rule run it every 10 min with
+// Lookback = 10 min + 10 min (longest span) + your ingestion delay, dedupe alerts on (correlation, group) with a
+// suppression of at least one span, and expect a group that crosses two runs to be reported by both (same
+// first_alert once the earlier run's events are inside the later lookback). The evaluation clock is the explicit
+// EvalEnd below (default now()): the window is (EvalEnd - Lookback, EvalEnd]; an event that arrives after a run's
+// EvalEnd with a TimeGenerated inside that run's window is seen by the next run only if the lookback still covers
+// it, which is why the lookback carries the ingestion delay. Cost grows with the number of candidate groups times
+// their events per two bins; measure it on your cluster before scheduling (DEPLOYMENT.md).
+// ADDRESSES: approved lists are split into IPv4 and IPv6 ranges and every range test is null-safe
+// (coalesce(..., false)), so an IPv6 client or a malformed client address is never silently exempted or dropped: it
+// stays eligible for every correlation. Allowlist entries are validated first (IsInvalidEntry): an entry that is not
+// one address or one address/prefix of its family is reported as a data_quality row and left out of the range tests,
+// so operator input errors are visible and invalid entries are not passed to the range tests. Events
+// without a client address are left out of the groups (they would otherwise form one bogus client) and reported as a
+// data_quality row.
+// DIFFERENCES TO SPL: Kusto has no null strings (a missing User-Agent is ""), so "sends no User-Agent" in the
+// approved-assessment exemption covers an empty value as well as an absent one; a missing Host is "" and stays
+// countable in correlation 4 (SPL coalesces it to "-"), but it is then the same group as an empty Host value (one lab
+// earlier local-model ARTEX client had both; an operator-level emulation of this file agrees with correlations.spl otherwise).
+// ---------------------------------------------------------------------------------------------------------------
+// FIELD MAPPING: edit only this block. Sigma webserver/proxy names -> columns used below.
+//   c-ip -> cIP, cs-method -> csMethod, cs-uri-stem -> csUriStem, cs-host -> csHost, cs-user-agent -> csUserAgent,
+//   sc-status -> scStatus (web); src_ip -> SrcIp, cs-host -> DestHost, cs-method -> Method, c-uri-stem -> UriStem,
+//   cs-content-type -> ContentType, c-useragent -> UserAgent (proxy; the proxy taxonomy name differs from the webserver one).
+// Tables whose columns carry the Sigma names (c-ip style, e.g. a custom log ingested from nginx JSON) need the
+// bracket form shown here; for W3CIISLog use: W3CIISLog | project TimeGenerated, cIP, csMethod, csUriStem, csHost,
+// csUserAgent, scStatus = toint(scStatus). For CommonSecurityLog/ASim web sessions map SrcIpAddr, HttpRequestMethod,
+// Url path, HttpHost, HttpUserAgent, HttpStatusCode.
+// --- configuration ---
+let Lookback = 1d;
+let EvalEnd = now();   // evaluation clock; the evaluation block keeps (EvalEnd - Lookback, EvalEnd]
+let WebAll = AiptWebLog
+    | project TimeGenerated, cIP = tostring(['c-ip']), csMethod = tostring(['cs-method']), csUriStem = tostring(['cs-uri-stem']),
+              csHost = tostring(['cs-host']), csUserAgent = tostring(['cs-user-agent']), scStatus = toint(['sc-status']);
+let Proxy = AiptProxyLog
+    | project TimeGenerated, SrcIp = tostring(src_ip), DestHost = tostring(['cs-host']), Method = tostring(['cs-method']),
+              UriStem = tostring(['c-uri-stem']), ContentType = tostring(['cs-content-type']), UserAgent = tostring(['c-useragent']);
+// Approved assessments (sigma/placeholders.yaml semantics): IPv4 and IPv6 addresses or CIDRs in separate lists, and
+// exact User-Agents (case-insensitive). Keep the never-matching defaults instead of empty lists (an empty dynamic
+// list exempts nothing either, but the defaults keep the shape visible).
+let approved_assessment_sources_v4 = dynamic(["0.0.0.0/32"]);
+let approved_assessment_sources_v6 = dynamic(["::/128"]);
+let approved_assessment_user_agents = dynamic(["aipt-unset-placeholder"]);
+let llm_approved_clients_v4 = dynamic(["0.0.0.0/32"]);
+let llm_approved_clients_v6 = dynamic(["::/128"]);
+// --- end configuration ---
+// --- helpers ---
+// Allowlist entry validation: one address or one "address/prefix" of the list's family, no whitespace, a single "/",
+// an all-digit prefix within 0-32 (v4) / 0-128 (v6); a v6 entry must be an IPv6 literal (parse_ipv6 also accepts IPv4
+// text, as an IPv4-mapped address). parse_ipv4 returns null when it cannot parse; parse_ipv6 returns an EMPTY STRING,
+// not null, so the v6 test is isempty.
+let IsInvalidEntry = (v: string, family: string) {
+    isempty(v) or v matches regex @"\s" or array_length(split(v, "/")) > 2
+    or (array_length(split(v, "/")) == 2 and not(tostring(split(v, "/")[1]) matches regex @"^[0-9]{1,3}$"))
+    or (family == "v4" and (isnull(parse_ipv4(tostring(split(v, "/")[0])))
+                            or (array_length(split(v, "/")) == 2 and not(toint(split(v, "/")[1]) between (0 .. 32)))))
+    or (family == "v6" and (not(tostring(split(v, "/")[0]) contains ":") or isempty(parse_ipv6(tostring(split(v, "/")[0])))
+                            or (array_length(split(v, "/")) == 2 and not(toint(split(v, "/")[1]) between (0 .. 128)))))
+};
+let ValidEntries = (l: dynamic, family: string) {
+    print v = l | mv-expand v | extend v = tostring(v) | where not(IsInvalidEntry(v, family)) | summarize make_list(v)
+};
+let approved_assessment_sources_v4_valid = toscalar(ValidEntries(approved_assessment_sources_v4, "v4"));
+let approved_assessment_sources_v6_valid = toscalar(ValidEntries(approved_assessment_sources_v6, "v6"));
+let llm_approved_clients_v4_valid = toscalar(ValidEntries(llm_approved_clients_v4, "v4"));
+let llm_approved_clients_v6_valid = toscalar(ValidEntries(llm_approved_clients_v6, "v6"));
+// Null-safe range test over the valid entries: ipv4_is_in_any_range / ipv6_is_in_any_range return null for an address
+// they cannot parse; coalesce turns that into "not approved" instead of a null that `where` would drop.
+let InAnyRange = (ip: string, v4: dynamic, v6: dynamic) {
+    coalesce(ipv4_is_in_any_range(ip, v4), false) or coalesce(ipv6_is_in_any_range(ip, v6), false)
+};
+let NonStaticMethods = dynamic(["GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE", "PATCH"]);
+let StaticExt = @"(?i)\.(js|css|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|map)$";
+let StaticDir = @"(?i)/(static|assets)/";
+let HealthPaths = dynamic(["/health", "/healthz", "/readyz", "/livez", "/status", "/metrics", "/ping", "/api/health"]);
+let IsApproved = (ip: string, ua: string) {
+    InAnyRange(ip, approved_assessment_sources_v4_valid, approved_assessment_sources_v6_valid) and (isempty(ua) or ua in~ (approved_assessment_user_agents))
+};
+// --- evaluation ---
+let WebWin = WebAll | where TimeGenerated > EvalEnd - Lookback and TimeGenerated <= EvalEnd;
+let ProxyWin = Proxy | where TimeGenerated > EvalEnd - Lookback and TimeGenerated <= EvalEnd;
+// Allowlist validation report (IsInvalidEntry above): one data_quality row per malformed entry; the entry is ignored.
+let AllowlistProblems = union
+    (print v = approved_assessment_sources_v4 | mv-expand v | extend family = "v4", list = "approved_assessment_sources_v4"),
+    (print v = llm_approved_clients_v4 | mv-expand v | extend family = "v4", list = "llm_approved_clients_v4"),
+    (print v = approved_assessment_sources_v6 | mv-expand v | extend family = "v6", list = "approved_assessment_sources_v6"),
+    (print v = llm_approved_clients_v6 | mv-expand v | extend family = "v6", list = "llm_approved_clients_v6")
+    | extend v = tostring(v)
+    | where IsInvalidEntry(v, family)
+    | project correlation = "data_quality_allowlist_entry_invalid", group = strcat(list, ": ", v), first_alert = EvalEnd, max_in_window = long(1);
+// Events without a client address never form a group; they are counted in the data_quality row below.
+let MissingAddress = WebWin | where isempty(cIP)
+    | summarize first_alert = min(TimeGenerated), max_in_window = count()
+    | where max_in_window > 0
+    | extend correlation = "data_quality_missing_client_address", group = "(missing c-ip)";
+let Web = WebWin | where isnotempty(cIP);
+// web_aipt_http_request_anonymous_base: no static assets, no OPTIONS / (cookie-bearing requests count: a cookie is not
+// server-validated authentication)
+let AnonymousBase = Web
+    | where csMethod in~ (NonStaticMethods) and not(csUriStem matches regex StaticExt) and not(csUriStem matches regex StaticDir)
+        and not(csMethod =~ "OPTIONS" and csUriStem == "/") and not(IsApproved(cIP, csUserAgent));
+let NotFoundBase = Web | where scStatus == 404 and not(IsApproved(cIP, csUserAgent));
+let NoUaBase = Web | where (isempty(csUserAgent) or csUserAgent == "-") and not(csUriStem in~ (HealthPaths))
+    and not(csUriStem startswith "/actuator/") and not(csMethod =~ "OPTIONS" and csUriStem == "/")
+    and not(InAnyRange(cIP, approved_assessment_sources_v4_valid, approved_assessment_sources_v6_valid));
+// Sliding event count per group g over (t - span, t]; one row per event with its window count n.
+let SlidingCountRows = (T: (g: string, TimeGenerated: datetime), span: timespan, threshold: long) {
+    let Rows = T | serialize rid = row_number() | extend b = bin(TimeGenerated, span);
+    let Cand = Rows
+        | summarize c = count() by g, b
+        | join kind=leftouter (Rows | summarize c2 = count() by g, b | extend b = b - span) on g, b
+        | where c + coalesce(c2, 0) >= threshold
+        | distinct g;
+    let Right = Rows | where g in (Cand) | project g, T2 = TimeGenerated, b;
+    Rows
+    | where g in (Cand)
+    | join kind=inner (Right | union (Right | extend b = b + span)) on g, b   // own bin and the previous bin only
+    | where T2 > TimeGenerated - span and T2 <= TimeGenerated
+    | summarize n = count() by g, rid, TimeGenerated
+};
+let SlidingCount = (T: (g: string, TimeGenerated: datetime), span: timespan, threshold: long) {
+    SlidingCountRows(T, span, threshold)
+    | where n >= threshold
+    | summarize first_alert = min(TimeGenerated), max_in_window = max(n) by g
+};
+// Sliding distinct count of v per group g over (t - span, t].
+let SlidingDistinct = (T: (g: string, TimeGenerated: datetime, v: string), span: timespan, threshold: long) {
+    let Rows = T | serialize rid = row_number() | extend b = bin(TimeGenerated, span);
+    let Cand = Rows
+        | summarize c = count() by g, b
+        | join kind=leftouter (Rows | summarize c2 = count() by g, b | extend b = b - span) on g, b
+        | where c + coalesce(c2, 0) >= threshold
+        | distinct g;
+    let Right = Rows | where g in (Cand) | project g, T2 = TimeGenerated, v2 = v, b;
+    Rows
+    | where g in (Cand)
+    | join kind=inner (Right | union (Right | extend b = b + span)) on g, b   // own bin and the previous bin only
+    | where T2 > TimeGenerated - span and T2 <= TimeGenerated
+    | summarize n = array_length(make_set(v2)) by g, rid, TimeGenerated
+    | where n >= threshold
+    | summarize first_alert = min(TimeGenerated), max_in_window = max(n) by g
+};
+// 1-7: the single-stream correlations
+let C1 = SlidingCount((AnonymousBase | project g = cIP, TimeGenerated), 10s, 30) | extend correlation = "correlation_aipt_request_burst";
+let C2 = SlidingDistinct((AnonymousBase | project g = cIP, TimeGenerated, v = csUriStem), 60s, 30)
+    | extend correlation = "correlation_aipt_distinct_paths_per_minute";
+let C3 = SlidingCount((NotFoundBase | project g = cIP, TimeGenerated), 60s, 15) | extend correlation = "correlation_aipt_http_404_burst";
+let C4 = SlidingCount((AnonymousBase | project g = strcat(cIP, "|", csHost, "|", csMethod, "|", csUriStem), TimeGenerated), 60s, 20)
+    | extend correlation = "correlation_aipt_identical_request_repeat";
+let C5 = SlidingCount((NoUaBase | project g = cIP, TimeGenerated), 60s, 40) | extend correlation = "correlation_aipt_empty_user_agent_burst";
+let C6 = SlidingDistinct((NotFoundBase | project g = cIP, TimeGenerated, v = iff(isempty(csUserAgent), "(none)", csUserAgent)), 10m, 2)
+    | extend correlation = "correlation_aipt_user_agent_diversity";
+let C7 = SlidingDistinct((NotFoundBase | project g = cIP, TimeGenerated, v = iff(isempty(csUserAgent), "(none)", csUserAgent)), 10m, 50)
+    | extend correlation = "correlation_aipt_user_agent_rotation";
+// 8: LLM API request, then within 300 s the point where the client's 10 s sliding request count first reaches 30.
+//    The LLM-call selector equals proxy_generic_llm_api_client: a POST to a provider host WITH an API path or a JSON
+//    body (not every POST to the host), or a POST with a JSON body and a non-browser UA to a local API path.
+let LlmCalls = ProxyWin
+    | where Method =~ "POST"
+    | extend provider_host = DestHost in~ ("api.anthropic.com", "api.openai.com", "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com", "api.deepseek.com",
+                          "api.moonshot.ai", "api.moonshot.cn", "api.z.ai", "open.bigmodel.cn", "generativelanguage.googleapis.com",
+                          "openrouter.ai", "api.groq.com", "api.mistral.ai", "api.together.xyz", "api.x.ai",
+                          "api.minimax.chat", "ark.cn-beijing.volces.com", "api.cohere.com", "api.fireworks.ai", "api.perplexity.ai",
+                          "api.cerebras.ai", "api.siliconflow.cn")
+        or DestHost endswith ".openai.azure.com"
+        or (DestHost startswith "bedrock-runtime." and DestHost endswith ".amazonaws.com")
+        or DestHost endswith "-aiplatform.googleapis.com"
+    | extend provider_api = UriStem contains "/chat/completions"
+        or UriStem contains "/messages"
+        or UriStem contains "/responses"
+        or UriStem contains "/completions"
+        or UriStem contains ":generateContent"
+        or UriStem contains ":streamGenerateContent"
+        or UriStem contains "/chatcompletion"
+        or UriStem contains "/services/aigc/"
+    | extend local_api = UriStem endswith "/chat/completions"
+        or UriStem endswith "/v1/messages"
+        or UriStem endswith "/v1/responses"
+        or UriStem endswith "/api/chat"
+        or UriStem endswith "/api/generate"
+    | where (provider_host and (provider_api or ContentType contains "json"))
+        or (local_api and ContentType contains "json" and not(UserAgent startswith "Mozilla/"))
+    | where isnotempty(SrcIp) and not(InAnyRange(SrcIp, llm_approved_clients_v4_valid, llm_approved_clients_v6_valid)) and not(IsApproved(SrcIp, UserAgent))
+    | project client = SrcIp, LlmT = TimeGenerated;
+let BurstPoints = SlidingCountRows((AnonymousBase | project g = cIP, TimeGenerated), 10s, 30)
+    | order by g asc, TimeGenerated asc
+    | extend prev_n = iff(prev(g) == g, prev(n), long(null))
+    | where n >= 30 and (isnull(prev_n) or prev_n < 30)
+    | project client = g, BurstT = TimeGenerated;
+let C8 = LlmCalls
+    | join kind=inner BurstPoints on client
+    | where BurstT >= LlmT and BurstT - LlmT <= 5m
+    | summarize first_alert = min(BurstT), max_in_window = count() by g = client
+    | extend correlation = "correlation_aipt_llm_call_then_target_requests";
+let Results = union C1, C2, C3, C4, C5, C6, C7, C8
+    | project correlation, group = g, first_alert, max_in_window
+    | union MissingAddress, AllowlistProblems;
+// --- end evaluation ---
+Results
+| order by correlation asc, first_alert asc

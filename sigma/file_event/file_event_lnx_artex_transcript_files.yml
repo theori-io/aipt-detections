@@ -1,0 +1,34 @@
+title: ARTEX Agent Transcript File Written
+id: 34a3e655-8ce7-4938-9fb9-da887d91002c
+name: file_event_lnx_artex_transcript_files
+status: experimental
+description: |
+    Detects ARTEX agent transcripts under <data>/transcripts/: exp<N>-planner.jsonl, exp<N>-worker-i<M>.jsonl,
+    exp<N>-main[-s<K>].jsonl, exp<N>-goals.jsonl, exp<N>-compactor.jsonl, exp<N>-btw-<id>.jsonl and conv-<id>.jsonl (the same session-name list
+    as YARA AIPT_ARTEX_Transcript_File). Each holds one LLM
+    session and is the primary record of what the agent did.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/worker.go#L95
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/planner.go#L443
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/compaction.go#L94
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/mainagent.go#L169-L180
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/goals.go#L121
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/sidequestion/capture.go#L27
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.collection
+    - attack.t1074.001
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection_exp:
+        TargetFilename|re: '/transcripts/exp[0-9]+-(worker-i[0-9]+|planner|main(-s[0-9]+)?|goals|compactor|btw-[A-Za-z0-9_-]+)\.jsonl$'
+    selection_conv:
+        TargetFilename|re: '/transcripts/conv-[0-9]+\.jsonl$'
+    condition: 1 of selection_*
+falsepositives:
+    - Unknown
+level: high

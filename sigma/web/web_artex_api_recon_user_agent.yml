@@ -1,0 +1,26 @@
+title: ARTEX API Recon Skill Script User-Agent
+id: 00dc4078-e4c5-4b49-a53d-3ef6f5c5bba3
+name: web_artex_api_recon_user_agent
+status: experimental
+description: |
+    Detects the User-Agents 'Mozilla/5.0 (spa-api-recon)' and 'Mozilla/5.0 (spa-api-recon spider)' set by the
+    reference scripts of the ARTEX api-recon skill (static chunk harvester and multi-page spider). The agent copies
+    these scripts and may edit them, so absence proves nothing; presence is a strong ARTEX indicator.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/skills/api-recon/scripts/harvest_static.py#L23
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/skills/api-recon/scripts/spider_mpa.py#L22
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.003
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|startswith: 'Mozilla/5.0 (spa-api-recon'
+    condition: selection
+falsepositives:
+    - Unknown
+level: high

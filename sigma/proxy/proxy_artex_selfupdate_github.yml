@@ -1,0 +1,39 @@
+title: ARTEX Self-Update Check or Release Download
+id: 350f64c4-a7f1-4d99-80b4-3708c59f87a8
+name: proxy_artex_selfupdate_github
+status: experimental
+description: |
+    Detects the ARTEX self-update client on a forward proxy: the User-Agent artex-selfupdate, the release check
+    against api.github.com/repos/Autumn-27/artex/releases/latest, or a download of a release asset
+    artex-<version>-<os>-<arch>.zip. An ARTEX instance runs on the source host.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/selfupdate/github.go#L18-L29
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/selfupdate/github.go#L97
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/selfupdate/github.go#L124-L128
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.command-and-control
+    - attack.t1102
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: proxy
+detection:
+    selection_ua:
+        c-useragent: 'artex-selfupdate'
+    selection_api:
+        cs-host: 'api.github.com'
+        c-uri|contains: '/repos/Autumn-27/artex/releases'
+    selection_asset:
+        cs-host:
+            - 'github.com'
+            - 'objects.githubusercontent.com'
+            - 'release-assets.githubusercontent.com'
+        c-uri|contains: '/Autumn-27/artex/'
+        c-uri|endswith: '.zip'
+    condition: 1 of selection_*
+falsepositives:
+    - A researcher fetching the ARTEX release page manually (not the User-Agent branch)
+level: high

@@ -1,0 +1,26 @@
+title: Shannon Configuration or Workspace File Written
+id: 65f02339-b935-44e3-8bbe-4f9a30b35adc
+name: file_event_lnx_shannon_home_directory
+status: experimental
+description: |
+    Detects files under ~/.shannon/, where the Shannon CLI keeps its credentials (config.toml) and run workspaces in
+    npx mode.
+references:
+    - https://github.com/KeygraphHQ/shannon/blob/2468b67d9e40d70d0b189462c5041c24e1dc886c/apps/cli/src/home.ts#L4-L19
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.collection
+logsource:
+    category: file_event
+    product: linux
+detection:
+    selection:
+        TargetFilename|contains:
+            - '/.shannon/config.toml'
+            - '/.shannon/workspaces/'
+    condition: selection
+falsepositives:
+    - Unrelated tools using a ~/.shannon directory
+level: low

@@ -1,0 +1,31 @@
+title: CyberStrikeAI Client User-Agent or TypeSafe Judge API Request
+id: 3c8ae62c-7294-4c44-ac49-25358ad14a13
+name: proxy_cyberstrikeai_operator_egress
+status: experimental
+description: |
+    Detects egress of a CyberStrikeAI operator host on a forward proxy: its client User-Agent
+    CyberStrikeAI/<version> or a POST to its HITL LLM-judge backend (exact host api.typesafe.ai; look-alike hosts
+    such as notapi.typesafe.ai do not match). The judge branch is an API request to a third-party service that other
+    clients also use, not product attribution on its own. The dashscope, FOFA, ZoomEye, Quake and
+    WeCom branches of the previous version were dropped because every user of those services matches them.
+references:
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/handler/fofa.go#L652
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/config/config.go#L1185
+author: Xint
+date: 2026-10-09
+modified: 2026-10-12
+tags:
+    - attack.command-and-control
+    - attack.t1102
+logsource:
+    category: proxy
+detection:
+    selection_ua:
+        c-useragent|startswith: 'CyberStrikeAI/'
+    selection_judge_host:
+        cs-host: 'api.typesafe.ai'
+        cs-method: 'POST'
+    condition: 1 of selection_*
+falsepositives:
+    - Other customers of the TypeSafe API (judge branch)
+level: medium

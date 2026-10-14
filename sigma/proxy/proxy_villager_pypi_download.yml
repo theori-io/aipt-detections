@@ -1,0 +1,29 @@
+title: Villager PyPI Package Download
+id: 3165cf4d-35bb-4750-9aa4-bfad53aab954
+name: proxy_villager_pypi_download
+status: experimental
+description: |
+    Detects a download of the PyPI package villager (index page or a villager-0.x distribution). The package's
+    existence and release history are verified on PyPI; every capability attributed to the tool in press reports
+    (self-destructing Kali containers, bundled remote-access plugins) is unverified.
+references:
+    - https://pypi.org/project/villager/
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.resource-development
+    - attack.t1588.002
+logsource:
+    category: proxy
+detection:
+    selection_index:
+        c-uri-stem|contains:
+            - '/simple/villager/'
+            - '/pypi/villager/'
+    selection_dist:
+        c-uri-stem|re: '/villager-0\.[0-9][^/]*\.(whl|tar\.gz)$'
+    condition: 1 of selection_*
+falsepositives:
+    - Unrelated packages or projects named villager
+level: low

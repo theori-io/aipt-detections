@@ -1,0 +1,26 @@
+title: HexStrike-AI HTTP Framework or Exploit User-Agent
+id: 593d3131-7735-46dc-9509-ffe3553c26d2
+name: web_hexstrike_user_agent
+status: experimental
+description: |
+    Detects the HexStrike-AI User-Agents HexStrike-HTTP-Framework/1.0 and 'Mozilla/5.0 (Compatible Exploit)' used by
+    its HTTP testing framework and exploit helper against targets.
+references:
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_server.py#L13287
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_server.py#L7098
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: webserver
+detection:
+    selection:
+        - cs-user-agent|startswith: 'HexStrike-HTTP-Framework/'
+        - cs-user-agent: 'Mozilla/5.0 (Compatible Exploit)'
+    condition: selection
+falsepositives:
+    - Unknown
+level: high

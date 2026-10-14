@@ -1,0 +1,30 @@
+title: Shannon Temporal Container, Worker or CLI
+id: 5c393799-a356-47fa-a08a-c2f7e921671f
+name: proc_creation_lnx_shannon_components
+status: experimental
+description: |
+    Detects command lines naming Shannon's components: the Temporal service container shannon-temporal, worker
+    containers shannon-worker-* on the Docker network shannon-net, and the npm CLI @keygraph/shannon.
+references:
+    - https://github.com/KeygraphHQ/shannon/blob/2468b67d9e40d70d0b189462c5041c24e1dc886c/docker-compose.yml#L3-L12
+    - https://github.com/KeygraphHQ/shannon/blob/2468b67d9e40d70d0b189462c5041c24e1dc886c/apps/cli/src/docker.ts#L24-L25
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1610
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection:
+        CommandLine|contains:
+            - 'shannon-temporal'
+            - 'shannon-net'
+            - 'shannon-worker-'
+            - 'keygraph/shannon'
+    condition: selection
+falsepositives:
+    - Sanctioned Shannon use in CI
+level: medium

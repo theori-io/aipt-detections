@@ -1,0 +1,42 @@
+title: CyberStrikeAI Server Binary or Its Tool Children
+id: 27e85058-a499-46b4-9ff1-339db5883a4f
+name: proc_creation_lnx_cyberstrikeai_server_or_child
+status: experimental
+description: |
+    Detects the CyberStrikeAI Go binary cyberstrike-ai or its stdio MCP server mcp-stdio starting, and the host
+    tools it spawns directly without a sandbox (nmap, hydra, shells, python, scanners).
+references:
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/README.md#L262
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/security/executor.go#L187
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/tools/nmap.yaml#L4
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1059.004
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_image:
+        Image|endswith:
+            - '/cyberstrike-ai'
+            - '/mcp-stdio'
+    selection_child:
+        ParentImage|endswith: '/cyberstrike-ai'
+        Image|endswith:
+            - '/nmap'
+            - '/hydra'
+            - '/sh'
+            - '/bash'
+            - '/python3'
+            - '/sqlmap'
+            - '/nuclei'
+            - '/dirsearch'
+            - '/nikto'
+            - '/ffuf'
+    condition: 1 of selection_*
+falsepositives:
+    - Sanctioned CyberStrikeAI deployments
+level: high

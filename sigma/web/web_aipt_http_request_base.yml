@@ -1,0 +1,42 @@
+title: HTTP Request Base Rule for AIPT Correlations
+id: 4fe0f0c0-a94a-40f3-8848-7fdf72b0192b
+name: web_aipt_http_request_base
+status: experimental
+description: |
+    CORRELATION BASE SELECTOR - DO NOT DEPLOY AS A STAND-ALONE ALERT. Used only by the correlations in
+    sigma/correlation/ (generate: false there); excluded from stand-alone conversion in the README commands and the
+    test harness (README, "Format notes"). Base rule that matches every logged HTTP request so that the AIPT correlation rules have an event stream to
+    count. It never alerts on its own. Sanctioned assessments are exempted when the client is listed in
+    %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents% (placeholders.yaml); both
+    lists ship empty.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-method:
+            - 'GET'
+            - 'POST'
+            - 'HEAD'
+            - 'OPTIONS'
+            - 'PUT'
+            - 'DELETE'
+            - 'PATCH'
+            - 'PROPFIND'
+            - 'TRACE'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: selection and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Base rule; every request matches
+level: informational

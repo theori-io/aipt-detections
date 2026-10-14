@@ -1,0 +1,94 @@
+`comment("AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+ARTEX / LLM-agent behavioural analytics - Splunk SPL. Executed on Splunk Enterprise 10.6.0.5 (offline container, development
+harness not in this repository) over internal fixtures and anonymised lab captures (an earlier local-model ARTEX run and runs 04/05): query 1 equals
+the internal idle-burst feature extractor on every client, query 2 equals a fixed-bin emulation of itself, query 3 equals the
+evaluator's correlation_aipt_llm_call_then_target_requests, query 4 equals the four indicators recomputed in Python.
+The Python comparison tooling and fixtures are not distributed in this public edition.
+Index/sourcetype: web-server access logs with fields clientip, method, uri_path, status, useragent, http_host (nginx
+JSON: remote_addr, method, uri, status, ua, http_host). Sigma parity: the thresholds of query 2 equal the
+Sigma correlations (sigma/correlation/), but these queries use fixed bins (bin _time) while Sigma correlations and the
+internal evaluator use sliding windows, so a burst that straddles a bin boundary can be missed here; these are
+hunting/triage queries, not a converted copy of the Sigma rules. Sliding-window equivalents of all eight
+correlations, tested on the same Splunk: analytics/correlations.spl (on the fixtures, bins here miss the distinct-path,
+identical-request and empty-UA groups that the sliding versions and the evaluator report). Approved-assessment exemptions are not applied: add
+a where NOT cidrmatch(<approved CIDR>, clientip) clause per approved range (README, "Policy").
+Idle gap: with a hosted model (GLM-5.3, lab runs 01-03, LLM latency p50 6-20 s) T=30 s found 4-7 think-act cycles per
+20-minute run and T=5 s 10-19; a CPU-bound local model (p50 659 s) makes every gap count. W and k are tool-mix
+properties and stay.")`
+
+`comment("1. Idle -> burst alternation (think -> act) per client. A request whose gap to the previous request of the same
+client is > T starts a cycle; the cycle counts when the forward window [start, start+W] (inclusive, start included)
+holds >= k requests. Only per-client time order is required (streamstats ... by clientip), so a global ascending sort
+is sufficient and no time_window is used.")`
+index=web sourcetype=nginx:json earliest=-24h
+| eval T=30, W=10, k=5
+| sort 0 _time
+| streamstats current=f last(_time) as prev_t by clientip
+| eval start_t=if(isnotnull(prev_t) AND (_time - prev_t) > T, _time, null())
+| streamstats last(start_t) as cycle_t by clientip
+| where isnotnull(cycle_t) AND (_time - cycle_t) <= W
+| stats count as burst_size by clientip cycle_t k
+| where burst_size >= k
+| stats count as idle_burst_cycles, min(cycle_t) as first_burst, max(cycle_t) as last_burst by clientip
+| where idle_burst_cycles >= 2
+
+`comment("2. Cadence signals with the Sigma correlation definitions (fixed bins): request burst >= 30 / 10 s and
+distinct paths >= 30 / 60 s over anonymous requests (web_aipt_http_request_anonymous_base: GET/POST/HEAD/OPTIONS/PUT/
+DELETE/PATCH, no static asset, not OPTIONS /; cookie-bearing requests count), identical (host, method, path) >= 20 / 60 s over the
+same requests, 404 >= 15 / 60 s, requests without User-Agent >= 40 / 60 s outside health/metrics paths and OPTIONS /,
+distinct UAs among 404 responses >= 2 / 10 min (informational, not counted in signals) and >= 50 / 10 min. Each c_*
+flag corresponds to one Sigma correlation and is meant to stand alone; signals is only a ranking aid. http_host is
+coalesced to - because eventstats drops events whose by-field is null (without it, requests without a Host header
+are lost from the identical count: the earlier local-model ARTEX run gave 12 instead of 16 on one client). Sliding-window versions:
+analytics/correlations.spl.")`
+index=web sourcetype=nginx:json earliest=-24h
+| eval ua=coalesce(useragent, ""), no_ua=if(ua="" OR ua="-", 1, 0), is404=if(status=404, 1, 0), http_host=coalesce(http_host, "-")
+| eval lb=if(upper(method)="OPTIONS" AND uri_path="/", 1, 0)
+| eval static=if(match(uri_path, "(?i)\.(js|css|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|map)$") OR match(uri_path, "(?i)/(static|assets)/"), 1, 0)
+| eval anon=if(match(method, "(?i)^(GET|POST|HEAD|OPTIONS|PUT|DELETE|PATCH)$") AND static=0 AND lb=0, 1, 0)
+| eval health=if(match(uri_path, "(?i)^(/health|/healthz|/readyz|/livez|/status|/metrics|/ping|/api/health)$") OR match(uri_path, "(?i)^/actuator/"), 1, 0)
+| eval noua_c=if(no_ua=1 AND health=0 AND lb=0, 1, 0)
+| eval np=if(anon=1, uri_path, null()), ident_key=if(anon=1, http_host."|".method."|".uri_path, null()), ua404=if(is404=1, ua, null())
+| bin span=10s _time as t10
+| bin span=60s _time as t60
+| bin span=10m _time as t600
+| eventstats sum(anon) as req10 by clientip t10
+| eventstats dc(np) as paths60, sum(is404) as n404_60, sum(noua_c) as noua60 by clientip t60
+| eventstats count as ident60 by clientip ident_key t60
+| eventstats dc(ua404) as ua600 by clientip t600
+| stats max(req10) as max_req_10s, max(paths60) as max_paths_60s, max(n404_60) as max_404_60s,
+        max(noua60) as max_noua_60s, max(ident60) as max_identical_60s, max(ua600) as max_ua404_10m, count as total by clientip
+| fillnull value=0 max_req_10s max_paths_60s max_404_60s max_noua_60s max_identical_60s max_ua404_10m
+| eval c_request_burst=if(max_req_10s>=30,1,0), c_distinct_paths=if(max_paths_60s>=30,1,0),
+       c_404_burst=if(max_404_60s>=15,1,0), c_identical_repeat=if(max_identical_60s>=20,1,0),
+       c_empty_ua_burst=if(max_noua_60s>=40,1,0), c_ua_diversity=if(max_ua404_10m>=2,1,0), c_ua_rotation=if(max_ua404_10m>=50,1,0)
+| eval signals=c_request_burst+c_distinct_paths+c_404_burst+c_identical_repeat+c_empty_ua_burst+c_ua_rotation
+| where signals >= 1 OR c_ua_diversity = 1
+| sort - signals - total
+
+`comment("3. Egress correlate (mirrors correlation_aipt_llm_call_then_target_requests): an LLM API request (same
+selector as proxy_generic_llm_api_client: a POST to a provider host with an API path or a JSON body, or a POST with a JSON
+body and a non-browser UA to a local API path; proxy fields src_ip, dest_host, uri_path, http_content_type, useragent) from a host
+followed within 5 min by a request burst (>= 30 anonymous requests, as in query 2, in one 10 s bin) from the same
+address. Needs proxy and web logs in the same Splunk; NAT can join different users behind one address. Fixed bins;
+the sliding version is analytics/correlations.spl query 8.")`
+(index=proxy method=POST
+   ((dest_host IN ("api.anthropic.com","api.openai.com","dashscope.aliyuncs.com","dashscope-intl.aliyuncs.com","api.deepseek.com","api.moonshot.ai","api.moonshot.cn","api.z.ai","open.bigmodel.cn","generativelanguage.googleapis.com","openrouter.ai","api.groq.com","api.mistral.ai","api.together.xyz","api.x.ai","api.minimax.chat","ark.cn-beijing.volces.com","api.cohere.com","api.fireworks.ai","api.perplexity.ai","api.cerebras.ai","api.siliconflow.cn","*.openai.azure.com","bedrock-runtime.*.amazonaws.com","*-aiplatform.googleapis.com")
+     (uri_path IN ("*/chat/completions*","*/messages*","*/responses*","*/completions*","*:generateContent*","*:streamGenerateContent*","*/chatcompletion*","*/services/aigc/*") OR http_content_type="*json*"))
+    OR (uri_path IN ("*/chat/completions","*/v1/messages","*/v1/responses","*/api/chat","*/api/generate") http_content_type="*json*" NOT useragent="Mozilla/*")))
+  OR (index=web sourcetype=nginx:json)
+| eval client=coalesce(src_ip, clientip), kind=if(index="proxy", "llm", "act")
+| eval anon=if(kind="act" AND match(method, "(?i)^(GET|POST|HEAD|OPTIONS|PUT|DELETE|PATCH)$") AND NOT match(uri_path, "(?i)\.(js|css|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|map)$") AND NOT match(uri_path, "(?i)/(static|assets)/") AND NOT (upper(method)="OPTIONS" AND uri_path="/"), 1, 0)
+| bin span=10s _time as t10
+| eventstats sum(anon) as req10 by client t10
+| where kind="llm" OR (kind="act" AND req10>=30)
+| sort 0 _time
+| eval llm_t=if(kind="llm", _time, null())
+| streamstats last(llm_t) as last_llm by client
+| where kind="act" AND isnotnull(last_llm) AND (_time - last_llm) <= 300
+| stats min(_time) as first_burst_request, values(last_llm) as llm_calls, count as burst_requests by client
+
+`comment("4. Static UA / path indicators (same strings as the Sigma web rules; console paths need status 200 as in
+web_artex_console_routes)")`
+index=web sourcetype=nginx:json (useragent="artex-enrich/*" OR useragent="norma/*" OR useragent="*(spa-api-recon*" OR (uri_path IN ("/api/auth/status","/api/auth/init") AND status=200))
+| stats count min(_time) as first max(_time) as last values(useragent) as ua by clientip uri_path

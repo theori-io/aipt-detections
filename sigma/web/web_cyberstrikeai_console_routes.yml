@@ -1,0 +1,37 @@
+title: CyberStrikeAI Console API Route Access
+id: 748b7564-74e6-4d83-baa5-8f9f40419e13
+name: web_cyberstrikeai_console_routes
+status: experimental
+description: |
+    Supporting rule for web servers or reverse proxies that may host a CyberStrikeAI console: requests for its
+    console-only API routes (agent stream and loop, HITL approvals, tool guard, external MCP, WebShell manager, C2
+    listeners and payload build, OpenAPI spec). Scanner templates request some of these paths on ordinary servers,
+    so check that the server is a CyberStrikeAI console (Suricata 9500200-9500202) before acting.
+references:
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/app/app.go#L1017-L1044
+    - https://github.com/AIPentest/CyberStrikeAI/blob/edec607731d2c8467a4c04de9b99bd9089857b3a/internal/app/app.go#L1336-L1381
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.command-and-control
+    - attack.t1071.001
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-uri-stem|startswith:
+            - '/api/eino-agent/stream'
+            - '/api/multi-agent/stream'
+            - '/api/agent-loop/'
+            - '/api/hitl/'
+            - '/api/tool-guard'
+            - '/api/external-mcp'
+            - '/api/webshell/'
+            - '/api/c2/listeners'
+            - '/api/c2/payloads/build'
+            - '/api/openapi/spec'
+    condition: selection
+falsepositives:
+    - Scanner templates requesting these paths on servers that are not CyberStrikeAI
+level: low

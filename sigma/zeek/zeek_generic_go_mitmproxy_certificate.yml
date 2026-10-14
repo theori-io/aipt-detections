@@ -1,0 +1,29 @@
+title: TLS Certificate Issued by a Mitmproxy CA
+id: 719406fe-5f30-4ba5-a822-b617b107b865
+name: zeek_generic_go_mitmproxy_certificate
+status: experimental
+description: |
+    Detects certificates issued by a CA named mitmproxy with a leaf subject organisation of mitmproxy, the shape go-
+    mitmproxy generates. ARTEX embeds go-mitmproxy as its traffic recorder (loopback port 8788 by default), but
+    every mitmproxy or go-mitmproxy user produces the same certificates.
+references:
+    - https://github.com/lqqyt2423/go-mitmproxy
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/traffic/traffic.go#L177-L207
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.credential-access
+    - attack.collection
+    - attack.t1557
+logsource:
+    product: zeek
+    service: x509
+detection:
+    selection:
+        certificate.issuer|contains: 'CN=mitmproxy'
+        certificate.subject|contains: 'O=mitmproxy'
+    condition: selection
+falsepositives:
+    - Developers running mitmproxy or go-mitmproxy for debugging
+level: informational

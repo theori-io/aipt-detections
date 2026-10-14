@@ -1,0 +1,40 @@
+title: Burst of Requests Without User-Agent From a Single Client
+id: 54ff969a-30f3-4381-85df-ffa8d6299b83
+name: correlation_aipt_empty_user_agent_burst
+status: experimental
+description: |
+    Detects 40 or more requests without a User-Agent from one client within 60 seconds; the base rule
+    web_aipt_empty_user_agent_base ignores health and metrics paths and OPTIONS /, so header-less load-balancer checks
+    do not count. Lab: the ZAP baseline spider (66 such requests), raw nmap probes driven by ARTEX and
+    CyberStrikeAI's scanners; the benign browser 0. On the synthetic benign corpus (docs/fp-report.md) only the
+    approved scan remains (6 windows); HAProxy/F5 health checks and .NET HttpClient API clients (no User-Agent by
+    default, up to 32 requests per minute) do not reach the threshold. With a hosted model the ARTEX default run 01
+    (2,449 header-less requests from a python http.client loop the model wrote) keeps 1 window; the tuned ARTEX run 02
+    and the CyberStrikeAI run 03 stayed below 40 header-less requests per minute because their scanners send a UA.
+    Thresholds were measured in an isolated lab against ARTEX, CyberStrikeAI, a scripted benign browser and a ZAP
+    baseline, first with a CPU-bound local 7B model and then, with the figures quoted above, with a hosted model
+    (GLM-5.3, runs 01-03: ARTEX default and tuned configuration, CyberStrikeAI; LLM latency p50 6-20 s). Burst size
+    and path or UA counts depend on the tool mix and on the tools the model chooses, not on the model's speed.
+    Re-baseline against your own traffic before alerting.
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+correlation:
+    type: event_count
+    rules:
+        - web_aipt_empty_user_agent_base
+    group-by:
+        - c-ip
+    timespan: 60s
+    condition:
+        gte: 40
+    generate: false
+falsepositives:
+    - Server-to-server clients without User-Agent (.NET HttpClient) polling faster than 40 per minute
+    - Sanctioned scans (approved-assessment placeholders)
+level: low

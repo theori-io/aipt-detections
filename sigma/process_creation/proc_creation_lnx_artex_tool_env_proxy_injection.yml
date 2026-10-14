@@ -1,0 +1,39 @@
+title: ARTEX Recording Proxy and CA Bundle Injected Into Tool Environment
+id: d65a7721-a07b-42a1-9f69-131539c18e00
+name: proc_creation_lnx_artex_tool_env_proxy_injection
+status: experimental
+description: |
+    Detects the environment ARTEX injects into every tool it spawns so that the traffic is recorded: HTTP_PROXY or
+    HTTPS_PROXY pointing at port 8788 together with CA-bundle variables set to the recording proxy's mitmproxy-ca-
+    cert.pem. Requires telemetry that records the process environment (auditd execve with environment, osquery
+    process_envs, eBPF agents) mapped to the field Environment, which is not part of the standard Sigma taxonomy.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/agent/worker.go#L204-L223
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.defense-impairment
+    - attack.t1553.004
+    - attack.credential-access
+    - attack.collection
+    - attack.t1557
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_proxy:
+        Environment|re: 'HTTPS?_PROXY=https?://[^ ]*:8788'
+    selection_ca:
+        Environment|contains:
+            - 'SSL_CERT_FILE='
+            - 'CURL_CA_BUNDLE='
+            - 'REQUESTS_CA_BUNDLE='
+            - 'NODE_EXTRA_CA_CERTS='
+            - 'GIT_SSL_CAINFO='
+    selection_cafile:
+        Environment|contains: 'mitmproxy-ca-cert.pem'
+    condition: all of selection_*
+falsepositives:
+    - A developer deliberately routing tools through a local mitmproxy on port 8788
+level: high

@@ -1,0 +1,25 @@
+title: ARTEX Console Session Cookie Presented
+id: f0720560-640f-41b0-9f5c-bfc066f5f314
+name: web_artex_console_session_cookie
+status: experimental
+description: |
+    Detects a client presenting the artex_token session cookie that the ARTEX console sets after login. Requires a
+    web-server or proxy log that records the Cookie header. The JWT branch of the previous version was dropped
+    because it needed a non-standard Authorization field; Suricata 9500056 and ModSecurity 9590105 cover the token.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/server/auth.go#L112
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.command-and-control
+    - attack.t1071.001
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-cookie|contains: 'artex_token='
+    condition: selection
+falsepositives:
+    - Unknown
+level: high

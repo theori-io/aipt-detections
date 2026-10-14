@@ -1,0 +1,110 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools
+# File:       aipt-block-eligible.sids - sids an operator MAY convert from alert to drop (inline IPS) after observation
+# Version:    1.0.0 (2026-10-12)
+# License:    Detection Rule License (DRL) 1.1 - https://github.com/SigmaHQ/Detection-Rule-License
+#
+# Every rule of this pack ships with action alert. The sids below carry "metadata: policy block-eligible": a
+# product-specific indicator (a tool's own User-Agent, console title, response body, cookie, JWT subject, LLM tool-set
+# or marker) that produced 0 alerts on the 510,680-request synthetic benign corpus and on lab runs 04 (benign browsing)
+# and 05 (ZAP baseline); see docs/fp-report.md. Generic and shape rules (policy alert / informational) are never
+# listed here and must never be converted to drop.
+#
+# MANDATORY before converting any of them: run the pack in observe mode (alert only) on your own traffic over a period
+# that contains normal peaks, batch windows, QA automation and at least one authorised assessment (DEPLOYMENT.md),
+# review every alert of these sids, and convert only the sids with zero unexplained alerts. This list is a set of
+# candidates for local policy review, not a recommendation to convert it wholesale. Convert per sensor
+# position (a sid that is quiet on the perimeter may not be on an LLM gateway). The five ARTEX conversation-marker sids
+# (9500032, 9500033, 9500034, 9500071, 9500072) may be converted on an egress proxy only, never on an LLM gateway or chat
+# proxy sensor: a conversation about the tool (a user pasting its prompts or transcripts) reproduces the indicator. Keep
+# the list under change control.
+# A block-eligible sid whose enforcement is not yet validated by a fixture is listed as "# deferred gid:sid" and is
+# not converted until that validation exists. Keep deferred entries commented out.
+# Format: one "gid:sid" per line, preceded by a comment with file and message, so the file (or the lines you keep)
+# can be used directly as a suricata-update drop.conf / modify list after the observation period.
+#
+
+# AIPT ARTEX Enrichment Prober User-Agent (artex-enrich) (aipt-target-facing.rules)
+1:9500001
+# AIPT ARTEX api-recon Skill Script User-Agent (spa-api-recon) (aipt-target-facing.rules)
+1:9500004
+# AIPT ARTEX Self-Update User-Agent (artex-selfupdate) (aipt-operator-egress.rules)
+1:9500020
+# AIPT ARTEX Self-Update GitHub Release Check (aipt-operator-egress.rules)
+1:9500021
+# AIPT ARTEX Planner LLM Request (graph_overview, add_intent, prove_goal tools) (aipt-llm-side.rules)
+1:9500023
+# AIPT ARTEX Worker LLM Request (record_fact, report_finding, insert_assets tools) (aipt-llm-side.rules)
+1:9500024
+# AIPT ARTEX LLM Request With Traffic Recorder Tools (traffic_search, traffic_get, traffic_blob) (aipt-llm-side.rules)
+1:9500025
+# AIPT ARTEX Goals Decomposer LLM Request (set_goals, set_constraints, add_task_scope tools) (aipt-llm-side.rules)
+1:9500026
+# AIPT ARTEX Guard Block Marker in LLM Request (aipt-llm-side.rules)
+#   LLM-side marker: convert to drop on an egress proxy only, never on an LLM gateway or chat proxy sensor, where a
+#   conversation about the tool reproduces the indicator
+1:9500032
+# AIPT ARTEX Worker Chat Marker in LLM Request (ARTEX_WORKER_CHAT) (aipt-llm-side.rules)
+#   LLM-side marker: convert to drop on an egress proxy only, never on an LLM gateway or chat proxy sensor, where a
+#   conversation about the tool reproduces the indicator
+1:9500033
+# AIPT ARTEX Worker Intent Block Header in LLM Request (aipt-llm-side.rules)
+#   LLM-side marker: convert to drop on an egress proxy only, never on an LLM gateway or chat proxy sensor, where a
+#   conversation about the tool reproduces the indicator
+1:9500034
+# AIPT ARTEX Control Plane Health Response (service artex) (aipt-exposed-console.rules)
+1:9500050
+# AIPT ARTEX Web Console HTML Title (aipt-exposed-console.rules)
+1:9500053
+# AIPT ARTEX Console Session Cookie (artex_token) (aipt-exposed-console.rules)
+1:9500055
+# AIPT ARTEX Console JWT With Subject ARTEX (aipt-exposed-console.rules)
+1:9500056
+# AIPT ARTEX Server Log Line in HTTP Response (backend listening on) (aipt-exposed-console.rules)
+1:9500059
+# AIPT ARTEX Web Console Static Asset by MD5 (favicon or logo) (aipt-exposed-console.rules)
+#   DEFERRED: the repository has no file-replay fixture for this filemd5 rule (the pcap generator carries HTTP headers
+#   only), so its drop behaviour is unvalidated. Keep it alert-only; uncomment after validating the match on your own
+#   capture of the ARTEX console assets.
+# deferred 1:9500060
+# AIPT ARTEX Console Login With Fixed Username ARTEX (aipt-exposed-console.rules)
+1:9500061
+# AIPT ARTEX Guard Block Marker in LLM Request (JSON unicode-escaped) (aipt-llm-side.rules)
+#   LLM-side marker: convert to drop on an egress proxy only, never on an LLM gateway or chat proxy sensor, where a
+#   conversation about the tool reproduces the indicator
+1:9500071
+# AIPT ARTEX Worker Intent Block Header in LLM Request (JSON unicode-escaped) (aipt-llm-side.rules)
+#   LLM-side marker: convert to drop on an egress proxy only, never on an LLM gateway or chat proxy sensor, where a
+#   conversation about the tool reproduces the indicator
+1:9500072
+# AIPT CyberStrikeAI Console HTML Title (aipt-exposed-console.rules)
+1:9500200
+# AIPT CyberStrikeAI API Docs Page Title (aipt-exposed-console.rules)
+1:9500201
+# AIPT CyberStrikeAI OpenAPI Spec Title (aipt-exposed-console.rules)
+1:9500202
+# AIPT CyberStrikeAI Client User-Agent (aipt-operator-egress.rules)
+1:9500206
+# AIPT CyberStrikeAI WebShell Manager User-Agent (aipt-target-facing.rules)
+1:9500207
+# AIPT CyberStrikeAI LLM Request (tool_search with built-in tool set) (aipt-llm-side.rules)
+1:9500209
+# AIPT HexStrike-AI API Server Health Response (aipt-exposed-console.rules)
+1:9500220
+# AIPT HexStrike-AI HTTP Framework User-Agent (aipt-target-facing.rules)
+1:9500223
+# AIPT HexStrike-AI Exploit Helper User-Agent (Compatible Exploit) (aipt-target-facing.rules)
+1:9500224
+# AIPT PentAGI Searcher User-Agent (aipt-operator-egress.rules)
+1:9500230
+# AIPT PentAGI Web UI HTML Title (aipt-exposed-console.rules)
+1:9500231
+# AIPT PentAGI Agent Tool Set in LLM Request (aipt-llm-side.rules)
+1:9500234
+# AIPT Strix Agent Tool Set in LLM Request (aipt-llm-side.rules)
+1:9500242
+# AIPT MetasploitMCP Default msfrpcd Password in RPC Login (aipt-exposed-console.rules)
+1:9500266
+# AIPT MetasploitMCP MCP tools/call of a Metasploit Tool (aipt-exposed-console.rules)
+1:9500268
+# AIPT MetasploitMCP Tool Set in LLM Request (aipt-llm-side.rules)
+1:9500269

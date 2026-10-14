@@ -1,0 +1,30 @@
+title: HexStrike-AI Server or MCP Client Started
+id: cdda796e-0543-48fb-91ac-0eb8277fdeb2
+name: proc_creation_lnx_hexstrike_server_or_mcp
+status: experimental
+description: |
+    Detects a Python interpreter executing hexstrike_server.py (script in the script-argument position; editors,
+    grep or cat that only mention the file name do not match) running (Flask API on all interfaces, port 8888, no authentication) or
+    hexstrike_mcp.py (the FastMCP bridge that a coding agent launches).
+references:
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_server.py#L98
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike_mcp.py#L143
+    - https://github.com/0x4m4/hexstrike-ai/blob/d689933ff579d839c676c82b231f8e98326c5f04/hexstrike-ai-mcp.json#L6-L7
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1059.006
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_interpreter:
+        Image|re: '/python[0-9.]*$'
+    selection_script_arg:
+        CommandLine|re: '^\S*python[0-9.]*(\s+-\S+)*\s+(\S*/)?hexstrike_(server|mcp)\.py(\s|$)'
+    condition: all of selection_*
+falsepositives:
+    - Sanctioned HexStrike-AI deployments
+level: high

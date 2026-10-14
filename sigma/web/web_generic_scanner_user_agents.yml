@@ -1,0 +1,48 @@
+title: Web Scanner User-Agents Used by AI Pentest Tools
+id: b39a5b4e-b75d-49e3-b834-8e2fe58c37e7
+name: web_generic_scanner_user_agents
+status: experimental
+description: |
+    Detects default User-Agents of the scanners that LLM-driven pentest tools run: nuclei (its fixed default is an
+    outdated Chrome/87.0.4280.88 string, seen on 32,450 requests in the CyberStrikeAI lab run 03 and 58,123 in an
+    earlier local-model run, plus its project UA),
+    ffuf, sqlmap, gobuster, Nikto, Wfuzz, WPScan and DirBuster. Generic by design: attribution comes from tool-
+    specific rules from the same client. dirsearch is not listed because it rotates browser UAs. Sanctioned
+    assessments are exempted when the client is listed in %approved_assessment_sources% and its User-Agent in
+    %approved_assessment_user_agents% (placeholders.yaml); both lists ship empty.
+references:
+    - https://github.com/projectdiscovery/nuclei
+    - https://github.com/ffuf/ffuf
+    - https://github.com/sqlmapproject/sqlmap
+author: Xint
+date: 2026-10-09
+modified: 2026-10-13
+tags:
+    - attack.reconnaissance
+    - attack.t1595.002
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|contains:
+            - 'Chrome/87.0.4280.88'
+            - 'Nuclei - Open-source project'
+            - 'Fuzz Faster U Fool'
+            - '(Nikto/'
+            - 'Wfuzz/'
+            - 'WPScan'
+            - 'DirBuster'
+    selection_prefix:
+        cs-user-agent|startswith:
+            - 'sqlmap/'
+            - 'gobuster/'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: 1 of selection* and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - Sanctioned vulnerability scanning (fill the approved-assessment placeholders)
+    - A real Chrome 87 browser (end-of-life since 2021)
+level: low

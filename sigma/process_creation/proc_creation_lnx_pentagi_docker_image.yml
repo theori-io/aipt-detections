@@ -1,0 +1,36 @@
+title: PentAGI Image or Container on the Docker CLI
+id: e94a96c7-2cd2-4612-905f-d18bd8bb4fff
+name: proc_creation_lnx_pentagi_docker_image
+status: experimental
+description: |
+    Detects docker, docker compose or podman command lines that name the PentAGI images. PentAGI itself starts its
+    per-flow sandboxes through the Docker socket; those launches only appear in Docker daemon events, not in process
+    telemetry.
+references:
+    - https://github.com/vxcontrol/pentagi/blob/b611fbebcf55b6deb88ad1fb7bf1f1ce7a357242/backend/pkg/config/config.go#L66-L72
+    - https://github.com/vxcontrol/pentagi/blob/b611fbebcf55b6deb88ad1fb7bf1f1ce7a357242/docker-compose.yml#L26
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.execution
+    - attack.t1610
+logsource:
+    category: process_creation
+    product: linux
+detection:
+    selection_cli:
+        Image|endswith:
+            - '/docker'
+            - '/docker-compose'
+            - '/podman'
+    selection_image:
+        CommandLine|contains:
+            - 'vxcontrol/pentagi'
+            - 'vxcontrol/kali-linux'
+            - 'vxcontrol/scraper'
+            - 'vxcontrol/graphiti'
+    condition: all of selection_*
+falsepositives:
+    - Sanctioned PentAGI installations
+level: medium

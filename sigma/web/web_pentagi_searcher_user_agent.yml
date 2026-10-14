@@ -1,0 +1,24 @@
+title: PentAGI Searcher User-Agent
+id: 6b5c55ab-5750-4d0c-8481-5027007462c0
+name: web_pentagi_searcher_user_agent
+status: experimental
+description: |
+    Detects the PentAGI/1.0 User-Agent of PentAGI's search tools, seen by a SearXNG or other web server that PentAGI
+    queries.
+references:
+    - https://github.com/vxcontrol/pentagi/blob/b611fbebcf55b6deb88ad1fb7bf1f1ce7a357242/backend/pkg/tools/searchers/searxng.go#L121
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1593
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-user-agent|startswith: 'PentAGI/'
+    condition: selection
+falsepositives:
+    - Sanctioned PentAGI deployments
+level: high

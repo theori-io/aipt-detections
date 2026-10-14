@@ -1,0 +1,21 @@
+# AIPT - detection pack for LLM-driven autonomous pentest tools. Version 1.0.0 (2026-10-12). License: DRL 1.1.
+# pySigma pipeline: CIDR-aware approved-source lists for the Splunk backend. Use it together with, and
+# before, aipt-placeholders.yaml (lower priority value = applied first):
+#   sigma convert -t splunk -p sigma/pipelines/aipt-cidr-splunk.yaml -p sigma/pipelines/aipt-placeholders.yaml <rules>
+# Each IP placeholder becomes a subsearch over a lookup file with one column `cidr` (single addresses or CIDRs, e.g.
+# 192.0.2.10, 198.51.100.0/24). The subsearch returns (field="198.51.100.0/24" OR ...); Splunk's search command matches
+# such values as CIDR ranges against IP-valued fields. Create approved_assessment_sources.csv and
+# llm_approved_clients.csv as lookup table files before scheduling the searches. An empty lookup returns nothing,
+# so nothing is exempted. Tested as a conversion (internal tests) and on Splunk 10.6.0.5
+# (development engine run): with 198.51.100.0/24 in the lookup, 198.51.100.77 is exempt and 203.0.113.9 is not. The
+# lookup files must be visible to the app that runs the searches (e.g. [lookups] export = system in metadata/local.meta);
+# a lookup private to another app makes the subsearch fail and nothing is exempted (alerts still fire).
+name: AIPT CIDR-aware source lists (Splunk)
+priority: 5
+transformations:
+  - id: aipt_cidr_lookup_splunk
+    type: query_expression_placeholders
+    expression: "[| inputlookup {id}.csv | rename cidr AS {field} | fields {field}]"
+    include:
+      - approved_assessment_sources
+      - llm_approved_clients

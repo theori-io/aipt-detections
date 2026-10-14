@@ -1,0 +1,42 @@
+title: Web App Manifest Requested Without Referer
+id: a03347e3-e7b9-498a-a4ad-8195c8c50c26
+name: web_generic_manifest_probe_no_referer
+status: experimental
+description: |
+    Supporting rule: a GET of asset-manifest.json, .vite/manifest.json or manifest.json without a Referer, which is
+    how scanner templates probe for build manifests (nuclei and dirsearch in the lab). Browsers load these files as
+    sub-resources with a Referer. The earlier ARTEX attribution was wrong: the api-recon harvester parses chunk maps
+    inside JavaScript files and never requests a manifest file. Sanctioned assessments are exempted when the client
+    is listed in %approved_assessment_sources% and its User-Agent in %approved_assessment_user_agents%
+    (placeholders.yaml); both lists ship empty.
+references:
+    - https://github.com/CSharperMantle/Autumn-27-ARTEX/blob/e6ec56999175509551a1e43a3ee3b053d0941bd9/skills/api-recon/scripts/harvest_static.py#L66-L83
+author: Xint
+date: 2026-10-09
+modified: 2026-10-10
+tags:
+    - attack.reconnaissance
+    - attack.t1595.003
+    - detection.threat-hunting
+logsource:
+    category: webserver
+detection:
+    selection:
+        cs-method: 'GET'
+        cs-uri-stem|endswith:
+            - '/asset-manifest.json'
+            - '/.vite/manifest.json'
+            - '/manifest.json'
+    filter_main_referer:
+        cs-referer|contains: '://'
+    filter_main_approved_assessment_src:
+        c-ip|expand: '%approved_assessment_sources%'
+    filter_main_approved_assessment_ua:
+        - cs-user-agent|expand: '%approved_assessment_user_agents%'
+        - cs-user-agent: null
+    condition: selection and not filter_main_referer and not (filter_main_approved_assessment_src and filter_main_approved_assessment_ua)
+falsepositives:
+    - PWA installs and service-worker refreshes
+    - Uptime monitors and CDN prefetchers
+    - Browsers on sites with Referrer-Policy no-referrer (NAT offices, residential, CGNAT), search-engine rendering, synthetic checks (measured on the synthetic benign corpus, docs/fp-report.md)
+level: informational
